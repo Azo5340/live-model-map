@@ -100,6 +100,31 @@ Valide (« Commit changes ») : le robot repart aussitôt et la carte se met à 
 minutes. Pour retirer l'alerte, supprime la ligne. Une faille signalée ainsi n'est jamais
 effacée par le robot, et elle prime sur la détection automatique.
 
+## Déclencheur externe (rythme fiable de 10 min)
+
+Les tâches planifiées de GitHub (`schedule`) sont « au mieux » : elles peuvent être retardées
+de beaucoup, voire ne pas démarrer pendant des heures sur un dépôt neuf. Un service de cron
+gratuit lance donc le check-up toutes les 10 minutes via l'API GitHub (`workflow_dispatch`).
+Le `schedule` reste en secours ; deux passes ne se chevauchent jamais (`concurrency`).
+
+1. **Jeton GitHub limité** : github.com → Settings → Developer settings → Personal access
+   tokens → *Fine-grained tokens* → Generate new token.
+   - Repository access : *Only select repositories* → `live-model-map`
+   - Permissions → Repository permissions → **Actions : Read and write** (rien d'autre)
+   - Expiration : au choix (à renouveler à l'échéance)
+2. **cron-job.org** (compte gratuit) → Create cronjob :
+   - URL : `https://api.github.com/repos/Azo5340/live-model-map/actions/workflows/checkup.yml/dispatches`
+   - Execution schedule : toutes les 10 minutes
+   - Advanced → Request method : `POST`
+   - Headers : `Authorization: Bearer <le jeton>`, `Accept: application/vnd.github+json`,
+     `X-GitHub-Api-Version: 2022-11-28`
+   - Request body : `{"ref":"main"}`
+3. Bouton *Test run* : réponse attendue **204**. L'onglet Actions du dépôt montre alors une
+   passe « workflow_dispatch ».
+
+Le jeton ne permet que de lancer ou annuler les workflows de ce dépôt. S'il fuit, révoque-le
+sur GitHub et crées-en un autre.
+
 ## Limites à connaître
 
 - **Rythme** : GitHub lance les tâches planifiées avec parfois quelques minutes de retard.
