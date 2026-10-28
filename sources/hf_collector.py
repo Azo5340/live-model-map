@@ -53,12 +53,31 @@ def list_models(pipeline_tag: str, sort: str, limit: int) -> list[dict]:
 
 
 def get_model(repo_id: str) -> dict | None:
+    """One model's metadata, including Hugging Face's own security scan of its files."""
     try:
-        return _get_json(f"{HF_API}/{urllib.parse.quote(repo_id)}?{_query({})}")
+        return _get_json(f"{HF_API}/{urllib.parse.quote(repo_id)}?{_query({'securityStatus': 'true'})}")
     except urllib.error.HTTPError as e:
         if e.code in (401, 403, 404):  # gated, private or deleted
             return None
         raise
+
+
+# Levels Hugging Face's scanners assign to files. "caution" mostly flags plain
+# Python scripts shipped with the model, so it isn't treated as an incident.
+SECURITY_ISSUE_LEVELS = ("unsafe", "suspicious")
+
+
+def security_of(hf_model: dict) -> dict | None:
+    """Hugging Face's malware / unsafe-pickle scan result, or None if it wasn't fetched."""
+    scan = hf_model.get("securityRepoStatus")
+    if scan is None:
+        return None
+    issues = [
+        {"path": f.get("path"), "level": f.get("level")}
+        for f in scan.get("filesWithIssues") or []
+        if f.get("level") in SECURITY_ISSUE_LEVELS
+    ]
+    return {"scanned": bool(scan.get("scansDone")), "issues": issues}
 
 
 # Context windows don't change between passes, so look each one up only once.

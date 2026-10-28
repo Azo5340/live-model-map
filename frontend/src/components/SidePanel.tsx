@@ -46,6 +46,16 @@ export default function SidePanel({
             {STATUS[statusOf(model)].label}
           </div>
           {model.status_detail && <p className="mt-1 text-xs text-slate-400">{model.status_detail}</p>}
+          <p className="mt-1 text-xs text-slate-500">
+            Analyse de sécurité Hugging Face :{" "}
+            {!model.security
+              ? "pas encore lue"
+              : model.security.issues.length > 0
+                ? <span className="text-violet-300">{model.security.issues.length} fichier(s) signalé(s)</span>
+                : model.security.scanned
+                  ? <span className="text-emerald-400">aucun fichier dangereux</span>
+                  : "analyse en attente chez Hugging Face"}
+          </p>
         </div>
         <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label="Fermer">
           ✕

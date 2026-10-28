@@ -21,7 +21,15 @@ export interface AIModel {
   usage: Usage;
   status: ModelStatus | null;
   status_detail: string | null;
+  security?: SecurityScan | null;
   updated_at: string;
+}
+
+/** Hugging Face's scan of the model repo's files (malware, unsafe pickles). */
+export interface SecurityScan {
+  scanned: boolean;
+  issues: { path: string; level: "unsafe" | "suspicious" }[];
+  checked_at: string;
 }
 
 export type ModelStatus = "operational" | "degraded" | "down" | "security_incident" | "unknown";

@@ -7,7 +7,9 @@
 2. Collects Hugging Face (trending + lineage) and OpenRouter (price + live status).
    Every pass checks the status of every model served on OpenRouter; every
    ~6 hours it also refreshes every known model's Hugging Face data.
-3. Applies pipeline/status_overrides.json (security incidents reported by hand).
+3. Flags a security incident when Hugging Face's scanners report an unsafe or
+   suspicious file in the model repo, then applies pipeline/status_overrides.json
+   (incidents reported by hand, which take precedence).
 4. Writes models.json, events.json, checkups.json (history) and todo.json.
 """
 
@@ -171,6 +173,14 @@ def collect(previous_models: dict, full: bool, errors: list[str]):
         wanted |= {k for k in previous_models if k.lower() not in have()}
     frontier = fetch_all(wanted) + list(fetched.values())
 
+    # Trending models come from the list endpoint, which has no security scan:
+    # read them individually when they're new, and on every full refresh.
+    need_scan = {
+        mid for mid, m in fetched.items()
+        if "securityRepoStatus" not in m and (full or mid.lower() not in known)
+    }
+    fetch_all(need_scan)
+
     # Walk up the lineage so parents exist and links can be drawn.
     for _ in range(LINEAGE_DEPTH):
         parents = {hf.base_model_of(m) for m in frontier} - {None}
@@ -254,7 +264,13 @@ def checkup(out: Path, previous_url: str | None) -> dict:
     checkups = previous["checkups"] or []
     initial = not previous_models
     last_full = next((c["ts"] for c in checkups if c.get("full")), None)
-    full = initial or last_full is None or started - parse(last_full) >= FULL_REFRESH_EVERY
+    full = (
+        initial
+        or last_full is None
+        or started - parse(last_full) >= FULL_REFRESH_EVERY
+        # Data published before security scans were collected: read every model once.
+        or not any("security" in m for m in previous_models.values())
+    )
 
     fetched, openrouter, statuses = collect(previous_models, full, errors)
     overrides, override_errors = load_overrides()
@@ -264,6 +280,9 @@ def checkup(out: Path, previous_url: str | None) -> dict:
     for mid, raw in fetched.items():
         merged[mid] = {**merged.get(mid, {}), **normalize(hf.to_live_map(raw, openrouter, statuses))}
         merged[mid]["last_seen"] = now
+        security = hf.security_of(raw)
+        if security is not None:  # otherwise keep the last scan we read
+            merged[mid]["security"] = {**security, "checked_at": now}
 
     for mid, m in merged.items():
         served = openrouter.get(mid.lower())
@@ -276,6 +295,14 @@ def checkup(out: Path, previous_url: str | None) -> dict:
                 m["status"], m["status_detail"] = status
         elif openrouter:  # catalogue loaded and the model isn't on it: no live status
             m["status"], m["status_detail"] = "unknown", None
+        # Automatic detection: Hugging Face flagged a dangerous file in the repo.
+        # Clears by itself once a later scan no longer reports it.
+        issues = (m.get("security") or {}).get("issues") or []
+        if issues:
+            files = ", ".join(f"{i['path']} ({i['level']})" for i in issues[:3])
+            more = f" et {len(issues) - 3} autre(s)" if len(issues) > 3 else ""
+            m["status"] = "security_incident"
+            m["status_detail"] = f"Détecté automatiquement par Hugging Face : {files}{more}"
         override = overrides.get(mid.lower())
         if override:
             m["status"], m["status_detail"] = override["status"], override.get("detail")

@@ -41,7 +41,7 @@ live-model-map/
 | Fonctionne | vert | meilleur fournisseur OpenRouter ≥ 95 % de disponibilité sur 30 min |
 | Dégradé | orange | entre 0 et 95 % |
 | En panne | rouge, pointillés | 0 %, ou plus aucun fournisseur |
-| Faille de sécurité | violet, pulsation | signalée à la main uniquement |
+| Faille de sécurité | violet, pulsation | automatique (analyse Hugging Face) ou signalée à la main |
 | État inconnu | gris | modèle absent d'OpenRouter |
 
 - **À traiter** : failles, pannes, modèles dégradés et nouveaux modèles (3 jours). Les cases
@@ -50,7 +50,19 @@ live-model-map/
 - **Check-ups** : l'historique des passes du robot (durée, nouveautés, erreurs).
 - Clic sur un nœud : détails et comparaison avec son parent ou n'importe quel autre modèle.
 
-## Signaler une faille (par ex. après une analyse REA)
+## Détection automatique des failles
+
+Hugging Face analyse les fichiers de chaque dépôt de modèle (logiciels malveillants, fichiers
+pickle capables d'exécuter du code). Le check-up lit ce résultat pour chaque nouveau modèle et
+pour tous les modèles toutes les ~6 h. Un fichier classé `unsafe` ou `suspicious` fait passer
+le modèle en **Faille de sécurité**, avec les fichiers en cause ; l'alerte disparaît d'elle-même
+quand Hugging Face ne signale plus rien. Le niveau `caution` (souvent un simple script Python)
+est ignoré.
+
+Ce que cette détection ne voit pas : les failles du modèle lui-même (jailbreak, fuite de
+données d'entraînement) ou des fournisseurs qui le servent. Celles-là se signalent à la main.
+
+## Signaler une faille à la main (par ex. après une analyse REA)
 
 Sur GitHub, ouvre `pipeline/status_overrides.json`, clique sur le crayon, et ajoute le modèle :
 
@@ -64,7 +76,7 @@ Sur GitHub, ouvre `pipeline/status_overrides.json`, clique sur le crayon, et ajo
 
 Valide (« Commit changes ») : le robot repart aussitôt et la carte se met à jour en quelques
 minutes. Pour retirer l'alerte, supprime la ligne. Une faille signalée ainsi n'est jamais
-effacée par le robot.
+effacée par le robot, et elle prime sur la détection automatique.
 
 ## Limites à connaître
 
