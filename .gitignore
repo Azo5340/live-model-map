@@ -8,3 +8,6 @@ frontend/dist/
 # Written by pipeline/checkup.py, published with the site, never committed.
 frontend/public/data/
 *.tsbuildinfo
+
+# Personal scripts kept out of the public repo.
+bridge.py
