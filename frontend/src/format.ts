@@ -10,15 +10,6 @@ export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
 
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";
 
-/** Node scale from usage volume, on a log scale so a few huge models don't flatten the rest. */
-export const MIN_SCALE = 0.8;
-export const MAX_SCALE = 1.7;
-export function volumeScale(volume: number | null, maxVolume: number): number {
-  if (!volume || maxVolume <= 0) return MIN_SCALE;
-  const t = Math.log10(1 + volume) / Math.log10(1 + maxVolume);
-  return MIN_SCALE + (MAX_SCALE - MIN_SCALE) * t;
-}
-
 /** Usage volume: live requests when a source provides them, otherwise daily downloads. */
 export const volumeOf = (m: AIModel): number | null =>
   m.usage.active_requests_est ?? m.usage.download_count_24h;

@@ -28,12 +28,12 @@ live-model-map/
 ├── sources/
 │   ├── hf_collector.py             source Hugging Face
 │   └── openrouter_source.py        source OpenRouter (prix, disponibilité)
-└── frontend/                       site React + React Flow (statique)
+└── frontend/                       site React + réseau 3D (statique)
 ```
 
 ## Le site
 
-### Réseau 3D (vue par défaut)
+### Réseau 3D
 
 `frontend/src/network3d/` — react-force-graph-3d + Three.js, chargé à part (lazy) :
 
@@ -52,12 +52,9 @@ live-model-map/
 - Performances : géométries, matériaux et textures partagés et libérés au démontage, une seule
   boucle d'animation, densité de pixels plafonnée, rendu en pause quand l'onglet est caché.
   Avec « réduire les animations » (système), plus de flottement, de pulsation ni de particules.
-- Sans WebGL, le site bascule sur la vue 2D. Le bouton « Lignée 2D » y donne accès à tout moment.
+- Sans WebGL, un message l'explique ; les listes et le panneau de détails restent utilisables.
 
-### Lignée 2D
-
-- **Carte** : un nœud par modèle, relié à son parent. Taille = volume d'usage (téléchargements
-  par jour, moyenne sur 30 jours, échelle logarithmique). Couleur = état :
+### États (couleur des nœuds)
 
 | État | Couleur | Origine |
 |---|---|---|
@@ -66,6 +63,8 @@ live-model-map/
 | En panne | rouge, pointillés | 0 %, ou plus aucun fournisseur |
 | Faille de sécurité | violet, pulsation | automatique (analyse Hugging Face) ou signalée à la main |
 | État inconnu | gris | modèle absent d'OpenRouter |
+
+### Barre latérale et panneau
 
 - **À traiter** : failles, pannes, modèles dégradés et nouveaux modèles (3 jours). Les cases
   « vu » sont mémorisées dans ton navigateur.

@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Snapshot } from "./api";
 import CheckupLog from "./components/CheckupLog";
 import EventFeed from "./components/EventFeed";
-import Map2D from "./components/Map2D";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
 import { ago, STATUS, statusOf } from "./format";
@@ -15,18 +14,7 @@ import { hasWebGL, useReducedMotion } from "./useReducedMotion";
 const Network3D = lazy(() => import("./network3d/Network3D"));
 
 const FLASH_MS = { new: 4000, updated: 1500 };
-const VIEW_KEY = "live-model-map:view";
 type Tab = "todo" | "events" | "checkups";
-type View = "3d" | "2d";
-
-function initialView(): View {
-  if (!hasWebGL()) return "2d";
-  try {
-    return localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
-  } catch {
-    return "3d";
-  }
-}
 
 export default function App() {
   const [models, setModels] = useState<Map<string, AIModel>>(new Map());
@@ -35,7 +23,6 @@ export default function App() {
   const [checkups, setCheckups] = useState<Checkup[]>([]);
   const [todo, setTodo] = useState<TodoItem[]>([]);
   const [tab, setTab] = useState<Tab>("todo");
-  const [view, setView] = useState<View>(initialView);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [flashes, setFlashes] = useState<Record<string, "new" | "updated">>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,15 +72,6 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  const switchView = (v: View) => {
-    setView(v);
-    try {
-      localStorage.setItem(VIEW_KEY, v);
-    } catch {
-      /* storage blocked: the choice just won't be remembered */
-    }
-  };
-
   const selected = selectedId ? models.get(selectedId) : undefined;
   const select = useCallback((id: string) => {
     setSelectedId(id);
@@ -133,20 +111,6 @@ export default function App() {
         </span>
 
         <div className="ml-auto flex items-center gap-3">
-          {webgl && (
-            <div className="flex rounded-lg border border-slate-800 p-0.5 text-xs" role="group" aria-label="Vue">
-              {(["3d", "2d"] as View[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => switchView(v)}
-                  aria-pressed={view === v}
-                  className={`rounded-md px-2.5 py-1 ${view === v ? "bg-cyan-500/15 text-cyan-300" : "text-slate-400 hover:text-slate-200"}`}
-                >
-                  {v === "3d" ? "Réseau 3D" : "Lignée 2D"}
-                </button>
-              ))}
-            </div>
-          )}
           <span className="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex" title={loadError ?? undefined}>
             <span
               className={`h-2 w-2 rounded-full ${
@@ -189,7 +153,7 @@ export default function App() {
         </nav>
 
         <main className="relative min-w-0 flex-1 overflow-hidden">
-          {view === "3d" && webgl ? (
+          {webgl ? (
             <Suspense fallback={<div className="absolute inset-0 grid place-items-center text-sm text-slate-500">Chargement du réseau 3D…</div>}>
               <Network3D
                 ref={network}
@@ -202,13 +166,12 @@ export default function App() {
               />
             </Suspense>
           ) : (
-            <Map2D
-              models={models}
-              flashes={flashes}
-              selectedId={selectedId}
-              onSelect={select}
-              onClear={() => setSelectedId(null)}
-            />
+            <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-400">
+              <p className="max-w-sm">
+                Ce navigateur ne prend pas en charge WebGL, nécessaire au réseau 3D. Les listes à gauche restent
+                disponibles ; cliquer sur un modèle ouvre ses détails.
+              </p>
+            </div>
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
@@ -221,12 +184,10 @@ export default function App() {
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
-                {view === "3d"
-                  ? "Volume ∝ téléchargements/jour (rayon ∝ racine cubique). Particules : flux vers le noyau selon ce volume."
-                  : "Taille du nœud = volume d'usage"}
+                Volume ∝ téléchargements/jour (rayon ∝ racine cubique). Particules : flux vers le noyau selon ce volume.
               </div>
             </div>
-            {view === "3d" && webgl && (
+            {webgl && (
               <button
                 onClick={() => network.current?.resetCamera()}
                 className="pointer-events-auto rounded-lg border border-slate-800 bg-[#050816]/80 px-3 py-1.5 text-xs text-slate-300 backdrop-blur hover:border-cyan-500/40 hover:text-cyan-300"
@@ -247,7 +208,7 @@ export default function App() {
               (onglet Actions du dépôt).
             </div>
           )}
-          {view === "3d" && webgl && (
+          {webgl && (
             <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
               Glisser : pivoter · Molette : zoom · Clic droit : déplacer · Clic sur un modèle : détails
             </p>

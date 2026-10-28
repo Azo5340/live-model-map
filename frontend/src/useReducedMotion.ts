@@ -14,7 +14,7 @@ export function useReducedMotion(): boolean {
   return reduced;
 }
 
-/** WebGL is required for the 3D view; without it the app falls back to 2D. */
+/** WebGL is required for the 3D view; without it the app shows a notice instead. */
 export function hasWebGL(): boolean {
   try {
     const canvas = document.createElement("canvas");
