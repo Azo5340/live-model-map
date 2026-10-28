@@ -1,0 +1,60 @@
+name: Check-up et publication
+
+on:
+  # Every 10 minutes. GitHub may start a scheduled run a few minutes late.
+  schedule:
+    - cron: "*/10 * * * *"
+  # Run it by hand from the Actions tab.
+  workflow_dispatch:
+  # Redeploy right away when the code or the manual statuses change.
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two passes at once: each one continues from the previous one's data.
+concurrency:
+  group: checkup
+  cancel-in-progress: false
+
+jobs:
+  checkup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Check-up des modèles
+        run: python pipeline/checkup.py --out frontend/public/data --previous-url "${{ steps.pages.outputs.base_url }}/data"
+
+      - name: Construction du site
+        working-directory: frontend
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend/dist
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

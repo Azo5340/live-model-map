@@ -1,0 +1,142 @@
+import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { compare } from "../compare";
+import { fmt, METRIC_LABELS, providerColor, STATUS, statusOf } from "../format";
+import type { AIModel, Metrics } from "../types";
+
+const CHART_METRICS: (keyof Metrics)[] = ["tokens_per_sec", "cost_per_1k_tokens", "elo_score"];
+
+export default function SidePanel({
+  model,
+  models,
+  onClose,
+}: {
+  model: AIModel;
+  models: Map<string, AIModel>;
+  onClose: () => void;
+}) {
+  const parent = model.parent_model_id ? models.get(model.parent_model_id) : undefined;
+  const [targetId, setTargetId] = useState<string | null>(parent?.id ?? null);
+
+  // Default comparison target is the predecessor; reset when the selection changes.
+  useEffect(() => setTargetId(parent?.id ?? null), [model.id, parent?.id]);
+
+  const target = targetId ? models.get(targetId) : undefined;
+  const comparison = useMemo(() => (target ? compare(model, target) : null), [model, target]);
+
+  return (
+    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-slate-800 bg-slate-900/95 md:w-[380px]">
+      <header className="flex items-start gap-3 border-b border-slate-800 p-4">
+        <span
+          className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
+          style={{ background: providerColor(model.provider) }}
+        />
+        <div className="min-w-0 flex-1">
+          <h2 className="truncate text-lg font-semibold">{model.name}</h2>
+          <p className="text-sm text-slate-400">
+            {model.provider}
+            {model.release_date ? ` · sorti le ${model.release_date}` : ""}
+          </p>
+          {parent && <p className="text-xs text-slate-500">dérivé de {parent.name}</p>}
+          <div
+            className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+            style={{ color: STATUS[statusOf(model)].color, background: `${STATUS[statusOf(model)].color}22` }}
+          >
+            <span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS[statusOf(model)].color }} />
+            {STATUS[statusOf(model)].label}
+          </div>
+          {model.status_detail && <p className="mt-1 text-xs text-slate-400">{model.status_detail}</p>}
+        </div>
+        <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label="Fermer">
+          ✕
+        </button>
+      </header>
+
+      <section className="grid grid-cols-2 gap-2 p-4 text-sm">
+        {(Object.keys(METRIC_LABELS) as (keyof Metrics)[]).map((k) => (
+          <div key={k} className="rounded-lg bg-slate-800/60 px-3 py-2">
+            <div className="text-[11px] text-slate-400">{METRIC_LABELS[k]}</div>
+            <div className="font-mono">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
+          </div>
+        ))}
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+          <div className="text-[11px] text-slate-400">Téléchargements / jour (moy. 30 j)</div>
+          <div className="font-mono">{fmt(model.usage.download_count_24h)}</div>
+        </div>
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+          <div className="text-[11px] text-slate-400">Requêtes actives (est.)</div>
+          <div className="font-mono">{fmt(model.usage.active_requests_est)}</div>
+        </div>
+      </section>
+
+      <section className="border-t border-slate-800 p-4">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Comparer avec
+        </label>
+        <select
+          className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
+          value={targetId ?? ""}
+          onChange={(e) => setTargetId(e.target.value || null)}
+        >
+          <option value="">— choisir un modèle —</option>
+          {[...models.values()]
+            .filter((m) => m.id !== model.id)
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+                {m.id === parent?.id ? " (prédécesseur)" : ""}
+              </option>
+            ))}
+        </select>
+
+        {comparison && target && (
+          <>
+            <ul className="mt-4 space-y-1.5 text-sm">
+              {comparison.deltas.map((d) => (
+                <li key={d.metric} className="flex justify-between gap-2">
+                  <span className="text-slate-400">{METRIC_LABELS[d.metric]}</span>
+                  <span
+                    className={
+                      d.better == null ? "text-slate-500" : d.better ? "text-emerald-400" : "text-rose-400"
+                    }
+                  >
+                    {d.label}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
+            {CHART_METRICS.map((k) => (
+              <div key={k} className="mt-5">
+                <div className="mb-1 text-xs text-slate-400">{METRIC_LABELS[k]}</div>
+                <ResponsiveContainer width="100%" height={70}>
+                  <BarChart
+                    layout="vertical"
+                    data={[
+                      { name: model.name, v: model.metrics[k] ?? 0, c: providerColor(model.provider) },
+                      { name: target.name, v: target.metrics[k] ?? 0, c: "#64748b" },
+                    ]}
+                    margin={{ left: 0, right: 16 }}
+                  >
+                    <XAxis type="number" hide />
+                    <YAxis type="category" dataKey="name" width={110} tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                    <Tooltip
+                      cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                      contentStyle={{ background: "#0f172a", border: "1px solid #334155" }}
+                    />
+                    <Bar dataKey="v" radius={[0, 4, 4, 0]} isAnimationActive>
+                      {[0, 1].map((i) => (
+                        <Cell key={i} fill={i === 0 ? providerColor(model.provider) : "#64748b"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
+          </>
+        )}
+      </section>
+    </aside>
+  );
+}

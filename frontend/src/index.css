@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+html, body, #root { height: 100%; margin: 0; }
+
+/* New node: scale in from nothing with a bright halo that fades out. */
+@keyframes pop-in {
+  0%   { transform: scale(0.2); opacity: 0; box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.9); }
+  60%  { transform: scale(1.12); opacity: 1; box-shadow: 0 0 40px 14px rgba(56, 189, 248, 0.7); }
+  100% { transform: scale(1);   box-shadow: 0 0 18px 4px rgba(56, 189, 248, 0.25); }
+}
+.node-new { animation: pop-in 900ms cubic-bezier(.2,.9,.3,1.3) both; }
+
+/* Metrics changed: short amber flash. */
+@keyframes flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); }
+  30%      { box-shadow: 0 0 28px 8px rgba(251, 191, 36, 0.75); }
+}
+.node-updated { animation: flash 1.4s ease-out; }
+
+/* Usage pulse: the ring's speed and size are set per node via CSS variables. */
+@keyframes usage-pulse {
+  0%   { transform: scale(1);                    opacity: 0.55; }
+  100% { transform: scale(var(--pulse-scale, 1.3)); opacity: 0; }
+}
+.usage-ring {
+  position: absolute; inset: -2px; border-radius: 0.9rem;
+  border: 2px solid rgb(56 189 248);
+  animation: usage-pulse var(--pulse-duration, 2.5s) ease-out infinite;
+  pointer-events: none;
+}
+
+/* Status: a down model fades out; a security incident throbs in purple until cleared. */
+.node-down { opacity: 0.6; border-style: dashed !important; }
+@keyframes incident {
+  0%, 100% { box-shadow: 0 0 10px 2px rgba(168, 85, 247, 0.45); }
+  50%      { box-shadow: 0 0 30px 10px rgba(168, 85, 247, 0.85); }
+}
+.node-incident { animation: incident 1.6s ease-in-out infinite; }
+
+@keyframes feed-in {
+  from { transform: translateY(-6px); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
+.feed-in { animation: feed-in 300ms ease-out; }
+
+.react-flow__attribution { background: transparent; }

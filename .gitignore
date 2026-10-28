@@ -1,0 +1,10 @@
+__pycache__/
+.venv/
+.DS_Store
+backend/data/
+rea_client/.live_map_state.json
+frontend/node_modules/
+frontend/dist/
+# Written by pipeline/checkup.py, published with the site, never committed.
+frontend/public/data/
+*.tsbuildinfo
