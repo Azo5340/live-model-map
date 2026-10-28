@@ -5,8 +5,8 @@
 
 1. Loads the previous state: from the published site (--previous-url), or from --out.
 2. Collects Hugging Face (trending + lineage) and OpenRouter (price + live status).
-   Every pass checks the status of every model served on OpenRouter; about once
-   an hour it also refreshes every known model's Hugging Face data.
+   Every pass checks the status of every model served on OpenRouter; every
+   ~6 hours it also refreshes every known model's Hugging Face data.
 3. Applies pipeline/status_overrides.json (security incidents reported by hand).
 4. Writes models.json, events.json, checkups.json (history) and todo.json.
 """
@@ -22,7 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "rea_client"))
+sys.path.insert(0, str(ROOT / "sources"))
 
 import hf_collector as hf  # noqa: E402
 from openrouter_source import SSL_CONTEXT, fetch_openrouter, fetch_status  # noqa: E402
@@ -34,12 +34,15 @@ STATE_FILES = ("models", "events", "checkups")
 
 TRENDING_LIMIT = 30
 LINEAGE_DEPTH = 2
-FULL_REFRESH_EVERY = timedelta(minutes=55)
+# Re-reading every known model on Hugging Face (downloads) is the expensive part,
+# so it only happens every few hours; statuses are still checked every pass.
+FULL_REFRESH_EVERY = timedelta(hours=6) - timedelta(minutes=5)
 FORGET_AFTER = timedelta(days=30)  # drop models no source has returned for this long
 NEW_MODEL_TODO_FOR = timedelta(days=3)
 MAX_EVENTS = 300
 MAX_CHECKUPS = 500
-WORKERS = 8
+WORKERS = 8  # OpenRouter status lookups
+HF_WORKERS = 4  # gentler on Hugging Face's rate limit
 
 
 def iso(dt: datetime) -> str:
@@ -130,21 +133,32 @@ def collect(previous_models: dict, full: bool, errors: list[str]):
         errors.append(f"OpenRouter (catalogue) : {e}")
 
     fetched: dict[str, dict] = {}
-    try:
-        for model in hf.list_models("text-generation", "trendingScore", TRENDING_LIMIT):
-            fetched[model["id"]] = model
-    except Exception as e:  # noqa: BLE001
-        errors.append(f"Hugging Face (tendances) : {e}")
+    # Once Hugging Face answers 429 (rate limit), stop asking for this pass: what's
+    # left is retried next pass and the map keeps the data it already has.
+    hf_limit = {"hit": False, "postponed": 0}
+
+    def hf_call(label: str, fn, *args):
+        if hf_limit["hit"]:
+            hf_limit["postponed"] += 1
+            return None
+        try:
+            return fn(*args)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                hf_limit["hit"] = True
+                hf_limit["postponed"] += 1
+            else:
+                errors.append(f"Hugging Face {label} : {e}")
+        except Exception as e:  # noqa: BLE001 - one source down must not stop the pass
+            errors.append(f"Hugging Face {label} : {e}")
+        return None
+
+    for model in hf_call("(tendances)", hf.list_models, "text-generation", "trendingScore", TRENDING_LIMIT) or []:
+        fetched[model["id"]] = model
 
     def fetch_all(repo_ids):
-        def one(repo_id):
-            try:
-                return hf.get_model(repo_id)
-            except Exception as e:  # noqa: BLE001
-                errors.append(f"Hugging Face {repo_id} : {e}")
-                return None
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            found = [m for m in pool.map(one, sorted(repo_ids)) if m]
+        with ThreadPoolExecutor(max_workers=HF_WORKERS) as pool:
+            found = [m for m in pool.map(lambda r: hf_call(r, hf.get_model, r), sorted(repo_ids)) if m]
         for model in found:
             fetched[model["id"]] = model
         return found
@@ -164,6 +178,12 @@ def collect(previous_models: dict, full: bool, errors: list[str]):
         if not parents:
             break
         frontier = fetch_all(parents)
+
+    if hf_limit["hit"]:
+        errors.append(
+            f"Hugging Face : limite de requêtes atteinte, {hf_limit['postponed']} requêtes "
+            "reportées à la prochaine passe (ajoute un HF_TOKEN pour un quota plus large)"
+        )
 
     # Live status for every model OpenRouter serves (new and already known).
     served = {k.lower() for k in set(previous_models) | set(fetched)} & set(openrouter)
