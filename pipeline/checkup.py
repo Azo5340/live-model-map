@@ -41,6 +41,7 @@ LINEAGE_DEPTH = 2
 FULL_REFRESH_EVERY = timedelta(hours=6) - timedelta(minutes=5)
 FORGET_AFTER = timedelta(days=30)  # drop models no source has returned for this long
 NEW_MODEL_TODO_FOR = timedelta(days=3)
+LOGO_REFRESH_EVERY = timedelta(days=7)
 MAX_EVENTS = 300
 MAX_CHECKUPS = 500
 WORKERS = 8  # OpenRouter status lookups
@@ -122,7 +123,7 @@ def normalize(record: dict) -> dict:
     }
 
 
-def collect(previous_models: dict, full: bool, errors: list[str]):
+def collect(previous_models: dict, previous_providers: dict, full: bool, errors: list[str]):
     # Context windows never change: reuse what we already know instead of re-reading config.json.
     for model_id, model in previous_models.items():
         if model["metrics"].get("context_window"):
@@ -189,6 +190,20 @@ def collect(previous_models: dict, full: bool, errors: list[str]):
             break
         frontier = fetch_all(parents)
 
+    # Provider logos: looked up once, then refreshed weekly.
+    providers = dict(previous_providers)
+    owners = {m["provider"] for m in previous_models.values()} | {
+        m.get("author") or m["id"].split("/", 1)[0] for m in fetched.values()
+    }
+    stale = datetime.now(timezone.utc) - LOGO_REFRESH_EVERY
+    to_lookup = sorted(o for o in owners if o not in providers or parse(providers[o]["checked_at"]) < stale)
+    with ThreadPoolExecutor(max_workers=HF_WORKERS) as pool:
+        # Wrapped so "no logo" (None) can be told apart from "lookup failed" (hf_call's None).
+        found = pool.map(lambda o: hf_call(f"logo {o}", lambda: {"avatar": hf.get_avatar(o)}), to_lookup)
+        for owner, result in zip(to_lookup, found):
+            if result is not None:
+                providers[owner] = {**result, "checked_at": iso(datetime.now(timezone.utc))}
+
     if hf_limit["hit"]:
         errors.append(
             f"Hugging Face : limite de requêtes atteinte, {hf_limit['postponed']} requêtes "
@@ -202,7 +217,7 @@ def collect(previous_models: dict, full: bool, errors: list[str]):
         results = pool.map(lambda k: fetch_status(openrouter[k]["openrouter_id"]), keys)
         statuses = {k: s for k, s in zip(keys, results) if s}
 
-    return fetched, openrouter, statuses
+    return fetched, openrouter, statuses, providers
 
 
 # --- merge, diff, outputs ---------------------------------------------------
@@ -272,7 +287,8 @@ def checkup(out: Path, previous_url: str | None) -> dict:
         or not any("security" in m for m in previous_models.values())
     )
 
-    fetched, openrouter, statuses = collect(previous_models, full, errors)
+    previous_providers = (previous["models"] or {}).get("providers", {})
+    fetched, openrouter, statuses, providers = collect(previous_models, previous_providers, full, errors)
     overrides, override_errors = load_overrides()
     errors += override_errors
 
@@ -368,7 +384,13 @@ def checkup(out: Path, previous_url: str | None) -> dict:
 
     out.mkdir(parents=True, exist_ok=True)
     outputs = {
-        "models": {"generated_at": now, "nodes": nodes, "links": links},
+        "models": {
+            "generated_at": now,
+            "nodes": nodes,
+            "links": links,
+            # Only providers still on the map; {name: {avatar, checked_at}}.
+            "providers": {p: providers[p] for p in sorted({m["provider"] for m in nodes}) if p in providers},
+        },
         "events": (new_events + events)[:MAX_EVENTS],
         "checkups": ([record] + checkups)[:MAX_CHECKUPS],
         "todo": {"generated_at": now, "items": build_todo(nodes, started)},

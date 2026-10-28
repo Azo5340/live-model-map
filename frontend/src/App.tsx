@@ -1,42 +1,50 @@
-import {
-  Background,
-  Controls,
-  MiniMap,
-  ReactFlow,
-  useNodesState,
-  type Edge,
-  type ReactFlowInstance,
-} from "@xyflow/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Snapshot } from "./api";
 import CheckupLog from "./components/CheckupLog";
 import EventFeed from "./components/EventFeed";
-import ModelNode, { type ModelFlowNode } from "./components/ModelNode";
+import Map2D from "./components/Map2D";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
-import { ago, providerColor, STATUS, statusOf, volumeOf, volumeScale } from "./format";
-import { layout } from "./layout";
-import type { AIModel, Checkup, ModelStatus, StreamEvent, TodoItem } from "./types";
+import { ago, STATUS, statusOf } from "./format";
+import type { Network3DHandle } from "./network3d/Network3D";
+import type { AIModel, Checkup, ModelStatus, Providers, StreamEvent, TodoItem } from "./types";
 import { useLiveData } from "./useLiveData";
+import { hasWebGL, useReducedMotion } from "./useReducedMotion";
 
-const nodeTypes = { model: ModelNode };
+// three.js is large: load the 3D view on its own so the rest of the page paints first.
+const Network3D = lazy(() => import("./network3d/Network3D"));
+
 const FLASH_MS = { new: 4000, updated: 1500 };
+const VIEW_KEY = "live-model-map:view";
 type Tab = "todo" | "events" | "checkups";
+type View = "3d" | "2d";
+
+function initialView(): View {
+  if (!hasWebGL()) return "2d";
+  try {
+    return localStorage.getItem(VIEW_KEY) === "2d" ? "2d" : "3d";
+  } catch {
+    return "3d";
+  }
+}
 
 export default function App() {
   const [models, setModels] = useState<Map<string, AIModel>>(new Map());
+  const [providers, setProviders] = useState<Providers>({});
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [checkups, setCheckups] = useState<Checkup[]>([]);
   const [todo, setTodo] = useState<TodoItem[]>([]);
   const [tab, setTab] = useState<Tab>("todo");
+  const [view, setView] = useState<View>(initialView);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [flashes, setFlashes] = useState<Record<string, "new" | "updated">>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState<ModelFlowNode>([]);
   const [, setTick] = useState(0);
-  const flow = useRef<ReactFlowInstance<ModelFlowNode> | null>(null);
+  const reducedMotion = useReducedMotion();
+  const network = useRef<Network3DHandle>(null);
   const modelsRef = useRef(models);
   modelsRef.current = models;
+  const webgl = useMemo(hasWebGL, []);
 
   const flash = useCallback((id: string, kind: "new" | "updated") => {
     setFlashes((f) => ({ ...f, [id]: kind }));
@@ -50,23 +58,21 @@ export default function App() {
   const onSnapshot = useCallback(
     (s: Snapshot) => {
       const before = modelsRef.current;
-      const firstLoad = before.size === 0;
-      let added = false;
-      for (const m of s.graph.nodes) {
-        const old = before.get(m.id);
-        if (firstLoad) continue;
-        if (!old) {
-          flash(m.id, "new");
-          added = true;
-        } else if (old.updated_at !== m.updated_at) {
-          flash(m.id, "updated");
+      if (before.size > 0) {
+        for (const m of s.graph.nodes) {
+          const old = before.get(m.id);
+          if (!old) flash(m.id, "new");
+          else if (old.updated_at !== m.updated_at) flash(m.id, "updated");
         }
       }
       setModels(new Map(s.graph.nodes.map((m) => [m.id, m])));
+      setProviders((prev) => {
+        const next = s.graph.providers ?? {};
+        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+      });
       setEvents(s.events);
       setCheckups(s.checkups);
       setTodo(s.todo.items);
-      if (added) window.setTimeout(() => flow.current?.fitView({ duration: 800, padding: 0.1 }), 50);
     },
     [flash],
   );
@@ -79,80 +85,20 @@ export default function App() {
     return () => window.clearInterval(id);
   }, []);
 
-  const edges: Edge[] = useMemo(
-    () =>
-      [...models.values()]
-        .filter((m) => m.parent_model_id && models.has(m.parent_model_id))
-        .map((m) => ({
-          id: `${m.parent_model_id}->${m.id}`,
-          source: m.parent_model_id!,
-          target: m.id,
-          animated: true,
-          style: { stroke: providerColor(m.provider), strokeWidth: 1.5, opacity: 0.7 },
-        })),
-    [models],
-  );
-
-  // Bigger node = more usage volume. Rounded so tiny changes don't trigger a re-layout.
-  const scales = useMemo(() => {
-    const maxVolume = Math.max(0, ...[...models.values()].map((m) => volumeOf(m) ?? 0));
-    return new Map(
-      [...models.values()].map((m) => [m.id, Math.round(volumeScale(volumeOf(m), maxVolume) * 20) / 20]),
-    );
-  }, [models]);
-
-  // Only re-run the (expensive) layout when the graph structure or node sizes
-  // change, so metric updates don't move nodes the user may have dragged.
-  const structureKey = useMemo(
-    () =>
-      [...models.keys()].sort().map((id) => `${id}:${scales.get(id)}`).join("|") +
-      "#" + edges.map((e) => e.id).sort().join("|"),
-    [models, edges, scales],
-  );
-  const positions = useMemo(() => {
-    const laid = layout(
-      [...models.keys()].map((id) => ({ id, position: { x: 0, y: 0 }, data: {} })),
-      edges,
-      (id) => scales.get(id) ?? 1,
-    );
-    return new Map(laid.map((n) => [n.id, n.position]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [structureKey]);
-
-  const maxActive = useMemo(
-    () => Math.max(0, ...[...models.values()].map((m) => m.usage.active_requests_est ?? 0)),
-    [models],
-  );
-
-  useEffect(() => {
-    setNodes((prev) => {
-      const prevById = new Map(prev.map((n) => [n.id, n]));
-      return [...models.values()].map((m) => {
-        const old = prevById.get(m.id);
-        return {
-          id: m.id,
-          type: "model" as const,
-          position: old?.position ?? positions.get(m.id) ?? { x: 0, y: 0 },
-          selected: m.id === selectedId,
-          data: { model: m, flash: flashes[m.id], scale: scales.get(m.id) ?? 1, maxActive },
-        };
-      });
-    });
-  }, [models, positions, flashes, scales, maxActive, selectedId, setNodes]);
-
-  // A structural change means new layout positions: apply them.
-  useEffect(() => {
-    setNodes((prev) => prev.map((n) => ({ ...n, position: positions.get(n.id) ?? n.position })));
-  }, [positions, setNodes]);
+  const switchView = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* storage blocked: the choice just won't be remembered */
+    }
+  };
 
   const selected = selectedId ? models.get(selectedId) : undefined;
-  const select = (id: string) => {
+  const select = useCallback((id: string) => {
     setSelectedId(id);
     setSidebarOpen(false);
-    const n = flow.current?.getNode(id);
-    const s = scales.get(id) ?? 1;
-    if (n) flow.current?.setCenter(n.position.x + 110 * s, n.position.y + 48 * s, { zoom: 1.1, duration: 600 });
-  };
+  }, []);
 
   const statusCounts = useMemo(() => {
     const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, 0])) as Record<ModelStatus, number>;
@@ -171,7 +117,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-slate-800/80 bg-[#050816] px-4 py-2.5">
         <button
           className="rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 lg:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -179,27 +125,48 @@ export default function App() {
         >
           ☰
         </button>
-        <h1 className="font-semibold tracking-tight">Live Model Map</h1>
-        <span className="hidden text-sm text-slate-500 sm:inline">{models.size} modèles</span>
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-slate-400" title={loadError ?? undefined}>
-          <span
-            className={`h-2 w-2 rounded-full ${
-              fetchState === "error" || stale ? "bg-rose-500" : fetchState === "loading" ? "bg-amber-400" : "bg-emerald-400"
-            }`}
-          />
-          {fetchState === "error"
-            ? "Données injoignables"
-            : lastCheckup
-              ? `Dernier check-up ${ago(lastCheckup.ts)}`
-              : "Chargement…"}
+        <h1 className="font-semibold tracking-tight">
+          Live Model Map <span className="font-normal text-cyan-400/80">· AI observability</span>
+        </h1>
+        <span className="hidden text-sm text-slate-500 md:inline">
+          {models.size} modèles · {Object.keys(providers).length} fournisseurs
         </span>
+
+        <div className="ml-auto flex items-center gap-3">
+          {webgl && (
+            <div className="flex rounded-lg border border-slate-800 p-0.5 text-xs" role="group" aria-label="Vue">
+              {(["3d", "2d"] as View[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => switchView(v)}
+                  aria-pressed={view === v}
+                  className={`rounded-md px-2.5 py-1 ${view === v ? "bg-cyan-500/15 text-cyan-300" : "text-slate-400 hover:text-slate-200"}`}
+                >
+                  {v === "3d" ? "Réseau 3D" : "Lignée 2D"}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex" title={loadError ?? undefined}>
+            <span
+              className={`h-2 w-2 rounded-full ${
+                fetchState === "error" || stale ? "bg-rose-500" : fetchState === "loading" ? "bg-amber-400" : "bg-emerald-400"
+              }`}
+            />
+            {fetchState === "error"
+              ? "Données injoignables"
+              : lastCheckup
+                ? `Dernier check-up ${ago(lastCheckup.ts)}`
+                : "Chargement…"}
+          </span>
+        </div>
       </header>
 
       <div className="relative flex min-h-0 flex-1">
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-slate-800 bg-slate-950 lg:static lg:flex`}
+          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-slate-800/80 bg-[#060a1c] lg:static lg:flex`}
         >
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
@@ -221,17 +188,54 @@ export default function App() {
           </div>
         </nav>
 
-        <main className="relative min-w-0 flex-1">
-          <div className="absolute right-3 top-3 z-10 rounded-xl border border-slate-800 bg-slate-950/85 px-3 py-2 text-xs backdrop-blur">
-            {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
-              <div key={k} className="flex items-center gap-2 py-0.5">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color }} />
-                <span className="text-slate-300">{STATUS[k].label}</span>
-                <span className="ml-auto pl-3 font-mono text-slate-500">{statusCounts[k]}</span>
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          {view === "3d" && webgl ? (
+            <Suspense fallback={<div className="absolute inset-0 grid place-items-center text-sm text-slate-500">Chargement du réseau 3D…</div>}>
+              <Network3D
+                ref={network}
+                models={models}
+                providers={providers}
+                selectedId={selectedId}
+                flashes={flashes}
+                onSelect={select}
+                reducedMotion={reducedMotion}
+              />
+            </Suspense>
+          ) : (
+            <Map2D
+              models={models}
+              flashes={flashes}
+              selectedId={selectedId}
+              onSelect={select}
+              onClear={() => setSelectedId(null)}
+            />
+          )}
+
+          <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
+            <div className="pointer-events-auto rounded-xl border border-slate-800/80 bg-[#050816]/80 px-3 py-2 text-xs backdrop-blur">
+              {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
+                <div key={k} className="flex items-center gap-2 py-0.5">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color, boxShadow: `0 0 8px ${STATUS[k].color}` }} />
+                  <span className="text-slate-300">{STATUS[k].label}</span>
+                  <span className="ml-auto pl-3 font-mono text-slate-500">{statusCounts[k]}</span>
+                </div>
+              ))}
+              <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
+                {view === "3d"
+                  ? "Volume ∝ téléchargements/jour (rayon ∝ racine cubique). Particules : flux vers le noyau selon ce volume."
+                  : "Taille du nœud = volume d'usage"}
               </div>
-            ))}
-            <div className="mt-1 border-t border-slate-800 pt-1 text-slate-500">Taille du nœud = volume d'usage</div>
+            </div>
+            {view === "3d" && webgl && (
+              <button
+                onClick={() => network.current?.resetCamera()}
+                className="pointer-events-auto rounded-lg border border-slate-800 bg-[#050816]/80 px-3 py-1.5 text-xs text-slate-300 backdrop-blur hover:border-cyan-500/40 hover:text-cyan-300"
+              >
+                Recentrer la vue
+              </button>
+            )}
           </div>
+
           {fetchState === "error" && models.size === 0 && (
             <div className="absolute left-4 top-4 z-10 max-w-md rounded-lg bg-rose-950 px-3 py-2 text-sm text-rose-200">
               Données introuvables : le premier check-up n'a peut-être pas encore tourné. ({loadError})
@@ -243,29 +247,11 @@ export default function App() {
               (onglet Actions du dépôt).
             </div>
           )}
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            nodeTypes={nodeTypes}
-            onNodesChange={onNodesChange}
-            onInit={(instance) => (flow.current = instance)}
-            onNodeClick={(_, n) => setSelectedId(n.id)}
-            onPaneClick={() => setSelectedId(null)}
-            fitView
-            minZoom={0.1}
-            colorMode="dark"
-            proOptions={{ hideAttribution: true }}
-          >
-            <Background gap={24} color="#1e293b" />
-            <MiniMap
-              pannable
-              zoomable
-              nodeColor={(n) => STATUS[statusOf((n.data as { model: AIModel }).model)].color}
-              maskColor="rgba(2,6,23,0.7)"
-              style={{ background: "#0f172a" }}
-            />
-            <Controls />
-          </ReactFlow>
+          {view === "3d" && webgl && (
+            <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
+              Glisser : pivoter · Molette : zoom · Clic droit : déplacer · Clic sur un modèle : détails
+            </p>
+          )}
         </main>
 
         {selected && (

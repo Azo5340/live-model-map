@@ -4,7 +4,7 @@ import { compare } from "../compare";
 import { fmt, METRIC_LABELS, providerColor, STATUS, statusOf } from "../format";
 import type { AIModel, Metrics } from "../types";
 
-const CHART_METRICS: (keyof Metrics)[] = ["tokens_per_sec", "cost_per_1k_tokens", "elo_score"];
+const CHART_METRICS: (keyof Metrics)[] = ["cost_per_1k_tokens", "context_window", "tokens_per_sec", "elo_score"];
 
 export default function SidePanel({
   model,
@@ -25,7 +25,7 @@ export default function SidePanel({
   const comparison = useMemo(() => (target ? compare(model, target) : null), [model, target]);
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-slate-800 bg-slate-900/95 md:w-[380px]">
+    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-slate-800/80 bg-[#070c22]/95 backdrop-blur md:w-[380px]">
       <header className="flex items-start gap-3 border-b border-slate-800 p-4">
         <span
           className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
@@ -62,21 +62,31 @@ export default function SidePanel({
         </button>
       </header>
 
+      {/* Only metrics the sources actually provide for this model. */}
       <section className="grid grid-cols-2 gap-2 p-4 text-sm">
-        {(Object.keys(METRIC_LABELS) as (keyof Metrics)[]).map((k) => (
-          <div key={k} className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <div className="text-[11px] text-slate-400">{METRIC_LABELS[k]}</div>
-            <div className="font-mono">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
+        {(Object.keys(METRIC_LABELS) as (keyof Metrics)[])
+          .filter((k) => model.metrics[k] != null)
+          .map((k) => (
+            <div key={k} className="rounded-lg bg-slate-800/60 px-3 py-2">
+              <div className="text-[11px] text-slate-400">{METRIC_LABELS[k]}</div>
+              <div className="font-mono">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
+            </div>
+          ))}
+        {model.usage.download_count_24h != null && (
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+            <div className="text-[11px] text-slate-400">Téléchargements / jour (moy. 30 j)</div>
+            <div className="font-mono">{fmt(model.usage.download_count_24h)}</div>
           </div>
-        ))}
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Téléchargements / jour (moy. 30 j)</div>
-          <div className="font-mono">{fmt(model.usage.download_count_24h)}</div>
-        </div>
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Requêtes actives (est.)</div>
-          <div className="font-mono">{fmt(model.usage.active_requests_est)}</div>
-        </div>
+        )}
+        {model.usage.active_requests_est != null && (
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+            <div className="text-[11px] text-slate-400">Requêtes actives (est.)</div>
+            <div className="font-mono">{fmt(model.usage.active_requests_est)}</div>
+          </div>
+        )}
+        <p className="col-span-2 text-[11px] leading-snug text-slate-500">
+          Non publiés par Hugging Face ni OpenRouter : vitesse, latence, ELO, nombre de requêtes, taux d'erreur.
+        </p>
       </section>
 
       <section className="border-t border-slate-800 p-4">
@@ -103,7 +113,10 @@ export default function SidePanel({
         {comparison && target && (
           <>
             <ul className="mt-4 space-y-1.5 text-sm">
-              {comparison.deltas.map((d) => (
+              {comparison.deltas.every((d) => d.label === "n/a") && (
+                <li className="text-slate-500">Aucune mesure disponible pour les deux modèles.</li>
+              )}
+              {comparison.deltas.filter((d) => d.label !== "n/a").map((d) => (
                 <li key={d.metric} className="flex justify-between gap-2">
                   <span className="text-slate-400">{METRIC_LABELS[d.metric]}</span>
                   <span
@@ -117,7 +130,7 @@ export default function SidePanel({
               ))}
             </ul>
 
-            {CHART_METRICS.map((k) => (
+            {CHART_METRICS.filter((k) => model.metrics[k] != null && target.metrics[k] != null).map((k) => (
               <div key={k} className="mt-5">
                 <div className="mb-1 text-xs text-slate-400">{METRIC_LABELS[k]}</div>
                 <ResponsiveContainer width="100%" height={70}>

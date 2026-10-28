@@ -62,6 +62,23 @@ def get_model(repo_id: str) -> dict | None:
         raise
 
 
+def get_avatar(owner: str) -> str | None:
+    """The logo an organization (or user) set on Hugging Face, or None if it has none.
+
+    Generated placeholder avatars (huggingface.co/avatars/...) are ignored: they
+    aren't logos, and only the avatar CDN allows cross-origin texture loading.
+    """
+    for kind in ("organizations", "users"):
+        try:
+            url = _get_json(f"https://huggingface.co/api/{kind}/{urllib.parse.quote(owner)}/avatar").get("avatarUrl")
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                continue
+            raise
+        return url if isinstance(url, str) and url.startswith("https://cdn-avatars.huggingface.co/") else None
+    return None
+
+
 # Levels Hugging Face's scanners assign to files. "caution" mostly flags plain
 # Python scripts shipped with the model, so it isn't treated as an incident.
 SECURITY_ISSUE_LEVELS = ("unsafe", "suspicious")

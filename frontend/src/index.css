@@ -44,3 +44,28 @@ html, body, #root { height: 100%; margin: 0; }
 .feed-in { animation: feed-in 300ms ease-out; }
 
 .react-flow__attribution { background: transparent; }
+
+body { background: #050816; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+
+/* 3D network hover tooltip (rendered by 3d-force-graph). */
+.float-tooltip-kap {
+  background: transparent !important;
+  padding: 0 !important;
+}
+.net-tip {
+  background: rgba(5, 8, 22, 0.88);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: 12px/1.45 Inter, system-ui, sans-serif;
+  color: #e2e8f0;
+  box-shadow: 0 0 24px rgba(34, 211, 238, 0.12);
+  backdrop-filter: blur(6px);
+  max-width: 260px;
+}
+.net-tip b { font-weight: 600; color: #f8fafc; }
+.net-tip-sub { color: #94a3b8; display: flex; align-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .node-new, .node-updated, .node-incident, .usage-ring, .feed-in { animation: none !important; }
+}

@@ -37,7 +37,11 @@ export type ModelStatus = "operational" | "degraded" | "down" | "security_incide
 export interface Graph {
   nodes: AIModel[];
   links: { source: string; target: string }[];
+  /** Provider logos from Hugging Face, keyed by provider name. */
+  providers?: Providers;
 }
+
+export type Providers = Record<string, { avatar: string | null; checked_at: string }>;
 
 export type StreamEventType = "MODEL_ADDED" | "METRICS_UPDATED" | "STATUS_CHANGED" | "ALERT";
 

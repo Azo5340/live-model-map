@@ -33,6 +33,29 @@ live-model-map/
 
 ## Le site
 
+### Réseau 3D (vue par défaut)
+
+`frontend/src/network3d/` — react-force-graph-3d + Three.js, chargé à part (lazy) :
+
+- **Noyau central « Live Analysis Core »** : le check-up qui collecte et analyse les données.
+- **Fournisseurs** autour du noyau : sphères de verre avec le logo Hugging Face de
+  l'organisation à l'intérieur (initiales si elle n'en a pas). Halo = pire état de ses modèles.
+- **Modèles** en satellites de leur fournisseur, colorés selon leur état ; liens violets =
+  vraie lignée (`base_model`).
+- **Volume** : rayon ∝ racine cubique des téléchargements/jour (le volume de la sphère est donc
+  proportionnel au volume réel), avec un minimum et un maximum, et un changement de taille animé.
+- **Flux** : des particules vont de chaque fournisseur vers le noyau ; leur nombre (1 à 4)
+  suit le volume de téléchargements, leur couleur l'état. Aucun trafic entre modèles n'est inventé.
+- Physique douce (forces, anti-collision, noyau fixe), flottement léger, glisser-déposer,
+  rotation / zoom / déplacement, survol (infobulle), clic (panneau + caméra qui s'approche),
+  bouton « Recentrer la vue ».
+- Performances : géométries, matériaux et textures partagés et libérés au démontage, une seule
+  boucle d'animation, densité de pixels plafonnée, rendu en pause quand l'onglet est caché.
+  Avec « réduire les animations » (système), plus de flottement, de pulsation ni de particules.
+- Sans WebGL, le site bascule sur la vue 2D. Le bouton « Lignée 2D » y donne accès à tout moment.
+
+### Lignée 2D
+
 - **Carte** : un nœud par modèle, relié à son parent. Taille = volume d'usage (téléchargements
   par jour, moyenne sur 30 jours, échelle logarithmique). Couleur = état :
 
@@ -89,8 +112,12 @@ effacée par le robot, et elle prime sur la détection automatique.
   s'arrête proprement et reprend à la passe suivante. Pour un quota plus large, crée un jeton
   gratuit sur huggingface.co (Settings → Access Tokens, type « Read ») et ajoute-le dans le
   dépôt : Settings → Secrets and variables → Actions → New repository secret, nom `HF_TOKEN`.
-- **Données absentes** : ni Hugging Face ni OpenRouter ne publient vitesse, latence, ELO ou
-  nombre d'utilisateurs en direct ; ces champs restent vides.
+- **Données absentes** : ni Hugging Face ni OpenRouter ne publient vitesse, latence, ELO,
+  nombre de requêtes, tokens traités, taux d'erreur ou nombre d'utilisateurs en direct. Le
+  panneau d'un modèle n'affiche que les mesures disponibles, et le volume des nœuds repose sur
+  les téléchargements (moyenne sur 30 jours), pas sur un trafic en temps réel.
+- **Logos** : ce sont les avatars que chaque organisation a choisis sur Hugging Face ; ils
+  restent la propriété de leurs auteurs.
 
 ## Lancer en local
 
