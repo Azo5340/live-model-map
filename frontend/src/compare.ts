@@ -7,14 +7,15 @@ const METRICS: Record<keyof Metrics, [boolean, string, string]> = {
   cost_per_1k_tokens: [false, "moins cher", "plus cher"],
   context_window: [true, "de contexte en plus", "de contexte en moins"],
   elo_score: [true, "d'ELO en plus", "d'ELO en moins"],
+  availability_pct: [true, "plus disponible", "moins disponible"],
 };
 
 /** Performance deltas of `model` against `target` ("+20% plus rapide"…). */
 export function compare(model: AIModel, target: AIModel): Comparison {
   const deltas: MetricDelta[] = (Object.keys(METRICS) as (keyof Metrics)[]).map((metric) => {
     const [higherBetter, betterWord, worseWord] = METRICS[metric];
-    const value = model.metrics[metric];
-    const targetValue = target.metrics[metric];
+    const value = model.metrics[metric] ?? null;
+    const targetValue = target.metrics[metric] ?? null;
 
     if (value == null || targetValue == null || targetValue === 0) {
       return { metric, value, target_value: targetValue, delta_pct: null, better: null, label: "n/a" };

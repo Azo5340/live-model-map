@@ -4,7 +4,13 @@ import { compare } from "../compare";
 import { fmt, METRIC_LABELS, providerColor, STATUS, statusOf } from "../format";
 import type { AIModel, Metrics } from "../types";
 
-const CHART_METRICS: (keyof Metrics)[] = ["cost_per_1k_tokens", "context_window", "tokens_per_sec", "elo_score"];
+const CHART_METRICS: (keyof Metrics)[] = [
+  "elo_score",
+  "cost_per_1k_tokens",
+  "availability_pct",
+  "context_window",
+  "tokens_per_sec",
+];
 
 export default function SidePanel({
   model,
@@ -56,6 +62,18 @@ export default function SidePanel({
                   ? <span className="text-emerald-400">aucun fichier dangereux</span>
                   : "analyse en attente chez Hugging Face"}
           </p>
+          <p className="mt-1 text-xs text-slate-500">
+            LMArena :{" "}
+            {model.arena ? (
+              <span className="text-slate-300">
+                #{model.arena.rank} au classement général
+                {model.arena.votes ? ` · ${fmt(model.arena.votes)} votes` : ""}
+                {model.arena.date ? ` · ${model.arena.date}` : ""}
+              </span>
+            ) : (
+              "absent du classement"
+            )}
+          </p>
         </div>
         <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label="Fermer">
           ✕
@@ -85,7 +103,8 @@ export default function SidePanel({
           </div>
         )}
         <p className="col-span-2 text-[11px] leading-snug text-slate-500">
-          Non publiés par Hugging Face ni OpenRouter : vitesse, latence, ELO, nombre de requêtes, taux d'erreur.
+          Non publiés par nos sources : vitesse, latence, nombre de requêtes, taux d'erreur. L'ELO n'existe que
+          pour les modèles classés sur LMArena.
         </p>
       </section>
 

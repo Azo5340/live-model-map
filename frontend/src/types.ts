@@ -4,6 +4,8 @@ export interface Metrics {
   cost_per_1k_tokens: number | null;
   context_window: number | null;
   elo_score: number | null;
+  /** Best OpenRouter provider's uptime over the last 30 min, in %. */
+  availability_pct?: number | null;
 }
 
 export interface Usage {
@@ -22,6 +24,8 @@ export interface AIModel {
   status: ModelStatus | null;
   status_detail: string | null;
   security?: SecurityScan | null;
+  /** LMArena (text, overall) entry this model was matched to. */
+  arena?: { name: string; rating: number; rank: number | null; votes: number | null; date: string | null } | null;
   updated_at: string;
 }
 

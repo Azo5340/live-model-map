@@ -38,14 +38,14 @@ def _get_json(url: str, timeout: float = 30):
         return json.load(resp)
 
 
-def fetch_status(openrouter_id: str) -> tuple[str, str] | None:
+def fetch_status(openrouter_id: str) -> tuple[str, str, float] | None:
     """Availability of a model across the providers serving it on OpenRouter.
 
     The model counts as usable if at least one provider serves it, so the best
     provider's uptime over the last 30 minutes decides (the 5-minute figure
     flaps too much for a check every 10 minutes):
     >= 95% operational, > 0% degraded, otherwise (or no provider left) down.
-    Returns (status, human-readable detail), or None if the lookup failed.
+    Returns (status, human-readable detail, best uptime in %), or None if the lookup failed.
     """
     # Keep any ":free" suffix: free-only models have no endpoints under the bare slug.
     try:
@@ -53,7 +53,7 @@ def fetch_status(openrouter_id: str) -> tuple[str, str] | None:
     except (urllib.error.URLError, TimeoutError, KeyError, TypeError, json.JSONDecodeError):
         return None
     if not endpoints:
-        return "down", "Aucun fournisseur ne sert ce modèle sur OpenRouter"
+        return "down", "Aucun fournisseur ne sert ce modèle sur OpenRouter", 0.0
 
     uptimes = [
         e.get("uptime_last_30m") if e.get("uptime_last_30m") is not None else e.get("uptime_last_5m")
@@ -65,11 +65,12 @@ def fetch_status(openrouter_id: str) -> tuple[str, str] | None:
     best = max(uptimes)
     healthy = sum(1 for u in uptimes if u >= 95)
     detail = f"{healthy}/{len(endpoints)} fournisseurs OK, meilleure dispo 30 min : {best:.0f}%"
+    availability = round(float(best), 1)
     if best >= 95:
-        return "operational", detail
+        return "operational", detail, availability
     if best > 0:
-        return "degraded", detail
-    return "down", detail
+        return "degraded", detail, availability
+    return "down", detail, availability
 
 
 def fetch_openrouter() -> dict[str, dict]:

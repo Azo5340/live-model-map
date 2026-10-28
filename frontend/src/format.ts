@@ -28,7 +28,8 @@ export const METRIC_LABELS: Record<keyof Metrics, string> = {
   latency_ms: "Latence (ms)",
   cost_per_1k_tokens: "Coût / 1k tok ($)",
   context_window: "Contexte (tok)",
-  elo_score: "ELO",
+  elo_score: "ELO (LMArena)",
+  availability_pct: "Disponibilité 30 min (%)",
 };
 
 /** "il y a 3 min", "il y a 2 h"… */

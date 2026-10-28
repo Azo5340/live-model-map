@@ -4,7 +4,8 @@
     python pipeline/checkup.py --out frontend/public/data --previous-url https://<user>.github.io/<repo>/data
 
 1. Loads the previous state: from the published site (--previous-url), or from --out.
-2. Collects Hugging Face (trending + lineage) and OpenRouter (price + live status).
+2. Collects Hugging Face (trending + lineage), OpenRouter (price, live status and
+   availability) and LMArena (ELO, matched by model name).
    Every pass checks the status of every model served on OpenRouter; every
    ~6 hours it also refreshes every known model's Hugging Face data.
 3. Flags a security incident when Hugging Face's scanners report an unsafe or
@@ -27,11 +28,14 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "sources"))
 
 import hf_collector as hf  # noqa: E402
+from lmarena_source import fetch_ratings, normalize_name  # noqa: E402
 from openrouter_source import SSL_CONTEXT, fetch_openrouter, fetch_status  # noqa: E402
 
 OVERRIDES_FILE = Path(__file__).with_name("status_overrides.json")
 STATUSES = {"operational", "degraded", "down", "security_incident", "unknown"}
-METRIC_KEYS = ("tokens_per_sec", "latency_ms", "cost_per_1k_tokens", "context_window", "elo_score")
+METRIC_KEYS = (
+    "tokens_per_sec", "latency_ms", "cost_per_1k_tokens", "context_window", "elo_score", "availability_pct",
+)
 STATE_FILES = ("models", "events", "checkups")
 
 TRENDING_LIMIT = 30
@@ -220,6 +224,18 @@ def collect(previous_models: dict, previous_providers: dict, full: bool, errors:
     return fetched, openrouter, statuses, providers
 
 
+def load_arena(previous: dict | None, full: bool, now: datetime, errors: list[str]) -> dict | None:
+    """The LMArena leaderboard: refreshed with each full pass, otherwise reused from the last one."""
+    fresh_enough = previous and now - parse(previous["fetched_at"]) < FULL_REFRESH_EVERY
+    if fresh_enough and not full:
+        return previous
+    try:
+        return {**fetch_ratings(), "fetched_at": iso(now)}
+    except Exception as e:  # noqa: BLE001 - one source down must not stop the pass
+        errors.append(f"LMArena : {e}")
+        return previous
+
+
 # --- merge, diff, outputs ---------------------------------------------------
 
 def significant(model: dict) -> tuple:
@@ -300,17 +316,33 @@ def checkup(out: Path, previous_url: str | None) -> dict:
         if security is not None:  # otherwise keep the last scan we read
             merged[mid]["security"] = {**security, "checked_at": now}
 
+    arena = load_arena((previous["models"] or {}).get("arena"), full, started, errors)
+
     for mid, m in merged.items():
+        previous_metrics = (previous_models.get(mid) or {}).get("metrics", {})
         served = openrouter.get(mid.lower())
         if served:
             m["last_seen"] = now
             m["metrics"]["cost_per_1k_tokens"] = served["cost_per_1k_tokens"]
             m["metrics"]["context_window"] = m["metrics"].get("context_window") or served["context_window"]
             status = statuses.get(mid.lower())
-            if status:  # lookup failed: keep the previous status
-                m["status"], m["status_detail"] = status
+            if status:
+                m["status"], m["status_detail"], m["metrics"]["availability_pct"] = status
+            else:  # lookup failed: keep the previous status and availability
+                m["metrics"]["availability_pct"] = previous_metrics.get("availability_pct")
         elif openrouter:  # catalogue loaded and the model isn't on it: no live status
             m["status"], m["status_detail"] = "unknown", None
+            m["metrics"]["availability_pct"] = None
+        else:  # OpenRouter unreachable this pass: keep what we had
+            m["metrics"]["availability_pct"] = previous_metrics.get("availability_pct")
+
+        # LMArena rating, matched on the model name (see sources/lmarena_source.py).
+        if arena is not None:
+            entry = arena["ratings"].get(normalize_name(m["name"]))
+            m["metrics"]["elo_score"] = entry["rating"] if entry else None
+            m["arena"] = {**entry, "date": arena.get("date")} if entry else None
+        else:
+            m["metrics"]["elo_score"] = previous_metrics.get("elo_score")
         # Automatic detection: Hugging Face flagged a dangerous file in the repo.
         # Clears by itself once a later scan no longer reports it.
         issues = (m.get("security") or {}).get("issues") or []
@@ -352,7 +384,11 @@ def checkup(out: Path, previous_url: str | None) -> dict:
         status_changed = m["status"] != old.get("status") and not (
             old.get("status") == "unknown" and m["status"] == "operational"
         )
-        changed = significant(m) != significant(old)
+        before, after = significant(old), significant(m)
+        if old["metrics"].get("elo_score") is None:
+            # A rating showing up for the first time isn't a change worth an event.
+            before, after = before[:-1], after[:-1]
+        changed = before != after
         m["status_since"] = now if m["status"] != old.get("status") else old.get("status_since", now)
         m["updated_at"] = now if (status_changed or changed) else old.get("updated_at", now)
         if status_changed:
@@ -390,6 +426,8 @@ def checkup(out: Path, previous_url: str | None) -> dict:
             "links": links,
             # Only providers still on the map; {name: {avatar, checked_at}}.
             "providers": {p: providers[p] for p in sorted({m["provider"] for m in nodes}) if p in providers},
+            # Cached LMArena leaderboard, refreshed every few hours.
+            "arena": arena,
         },
         "events": (new_events + events)[:MAX_EVENTS],
         "checkups": ([record] + checkups)[:MAX_CHECKUPS],

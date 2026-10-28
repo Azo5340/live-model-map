@@ -134,7 +134,7 @@ def to_live_map(hf_model: dict, openrouter: dict[str, dict], statuses: dict[str,
     downloads_30d = hf_model.get("downloads")
     served = openrouter.get(repo_id.lower(), {})
     # Models not served on OpenRouter have no live status: leave it as is (None).
-    status, status_detail = statuses.get(repo_id.lower()) or (None, None)
+    status, status_detail, _availability = statuses.get(repo_id.lower()) or (None, None, None)
     return {
         "id": repo_id,
         "name": repo_id.split("/", 1)[1],
