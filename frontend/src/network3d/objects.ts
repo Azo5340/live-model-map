@@ -279,7 +279,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     }),
     ),
   );
-  halo.scale.setScalar(3.6);
+  halo.scale.setScalar(2.8);
   const label = pool.label("LIVE ANALYSIS CORE", 0.2, "#a5f3fc");
   label.position.y = -2.05;
 

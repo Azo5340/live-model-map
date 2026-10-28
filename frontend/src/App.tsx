@@ -97,11 +97,12 @@ export default function App() {
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-slate-800/80 bg-[#050816] px-4 py-2.5">
         <button
-          className="rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 lg:hidden"
+          className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 sm:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
-          aria-label="Afficher la liste à traiter"
+          aria-expanded={sidebarOpen}
+          aria-label="Afficher À traiter, Fil et Check-ups"
         >
-          ☰
+          ☰ <span className="text-xs">À traiter{todo.length ? ` (${todo.length})` : ""}</span>
         </button>
         <h1 className="font-semibold tracking-tight">
           Live Model Map <span className="font-normal text-cyan-400/80">· AI observability</span>
@@ -130,14 +131,14 @@ export default function App() {
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-slate-800/80 bg-[#060a1c] lg:static lg:flex`}
+          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-slate-800/80 bg-[#060a1c] sm:static sm:flex sm:w-56 lg:w-72`}
         >
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`flex-1 rounded-md px-2 py-1 text-xs ${
+                className={`flex-1 whitespace-nowrap rounded-md px-1.5 py-1 text-xs ${
                   tab === t.id ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -175,7 +176,7 @@ export default function App() {
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-            <div className="pointer-events-auto rounded-xl border border-slate-800/80 bg-[#050816]/80 px-3 py-2 text-xs backdrop-blur">
+            <div className="pointer-events-auto hidden rounded-xl border border-slate-800/80 bg-[#050816]/80 px-3 py-2 text-xs backdrop-blur sm:block">
               {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color, boxShadow: `0 0 8px ${STATUS[k].color}` }} />
@@ -198,12 +199,12 @@ export default function App() {
           </div>
 
           {fetchState === "error" && models.size === 0 && (
-            <div className="absolute left-4 top-4 z-10 max-w-md rounded-lg bg-rose-950 px-3 py-2 text-sm text-rose-200">
+            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-rose-950/95 px-3 py-2 text-sm text-rose-200 sm:right-auto sm:max-w-md">
               Données introuvables : le premier check-up n'a peut-être pas encore tourné. ({loadError})
             </div>
           )}
           {stale && (
-            <div className="absolute left-4 top-4 z-10 max-w-md rounded-lg bg-amber-950 px-3 py-2 text-sm text-amber-200">
+            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-amber-950/95 px-3 py-2 text-sm text-amber-200 sm:right-auto sm:max-w-md">
               Pas de check-up depuis {ago(lastCheckup.ts).replace("il y a ", "")}. GitHub a peut-être mis le robot en pause
               (onglet Actions du dépôt).
             </div>

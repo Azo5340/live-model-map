@@ -31,6 +31,8 @@ interface Props {
 }
 
 const BACKGROUND = "#050816";
+/** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
+const MIN_FIT_EXTENT = 250;
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -240,14 +242,30 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     fgRef.current?.zoomToFit(1000, 40);
   }, []);
 
-  // Frame the network once the first layout has roughly settled (and again when
-  // the simulation fully stops, see onEngineStop).
+  // Frame the network once the layout has spread out. Fitting too early (nodes
+  // still bunched at the origin) would put the camera inside the core's glow.
+  const fitWhenSpread = useCallback((ms: number) => {
+    const fg = fgRef.current;
+    const box = fg?.getGraphBbox();
+    if (!fg || !box) return false;
+    const extent = Math.max(box.x[1] - box.x[0], box.y[1] - box.y[0], box.z[1] - box.z[0]);
+    if (!Number.isFinite(extent) || extent < MIN_FIT_EXTENT) return false;
+    fg.zoomToFit(ms, 40);
+    return true;
+  }, []);
+
   const hasNodes = graph.nodes.length > 1;
   useEffect(() => {
     if (!hasNodes || fitted.current) return;
-    const id = window.setTimeout(() => fgRef.current?.zoomToFit(800, 40), 1500);
+    let tries = 0;
+    let id: number;
+    const attempt = () => {
+      if (fitted.current || fitWhenSpread(800) || ++tries > 20) return;
+      id = window.setTimeout(attempt, 750);
+    };
+    id = window.setTimeout(attempt, 1200);
     return () => window.clearTimeout(id);
-  }, [hasNodes]);
+  }, [hasNodes, fitWhenSpread]);
   useImperativeHandle(ref, () => ({ resetCamera }), [resetCamera]);
 
   // Selecting a model (here or from the side lists) flies the camera to it.
@@ -334,10 +352,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           warmupTicks={60}
           cooldownTicks={250}
           onEngineStop={() => {
-            if (!fitted.current) {
-              fitted.current = true;
-              fgRef.current?.zoomToFit(900, 40);
-            }
+            if (!fitted.current && fitWhenSpread(900)) fitted.current = true;
           }}
         />
       )}
