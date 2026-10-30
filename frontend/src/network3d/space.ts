@@ -58,8 +58,8 @@ export function createSpace() {
       fog: false,
     });
 
-  const stars = new THREE.Points(cloud(3200, 4500, false), material(7, 0.75));
-  const dust = new THREE.Points(cloud(2200, 520, true), material(3.4, 0.5));
+  const stars = new THREE.Points(cloud(3600, 9000, false), material(12, 0.75));
+  const dust = new THREE.Points(cloud(2600, 1000, true), material(5.5, 0.5));
   const group = new THREE.Group();
   group.add(stars, dust);
 

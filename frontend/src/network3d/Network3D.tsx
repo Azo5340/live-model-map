@@ -39,7 +39,7 @@ interface Props {
 
 const BACKGROUND = "#02030a";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
-const MIN_FIT_EXTENT = 500;
+const MIN_FIT_EXTENT = 900;
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -154,7 +154,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     if (!fg || size.width === 0) return;
 
     const charge = fg.d3Force("charge") as unknown as { strength: (fn: (n: GNode) => number) => void } | undefined;
-    charge?.strength((n) => (n.kind === "engine" ? -900 : n.kind === "provider" ? -320 : -55));
+    charge?.strength((n) => (n.kind === "engine" ? -2400 : n.kind === "provider" ? -900 : -160));
     const link = fg.d3Force("link") as unknown as
       | { distance: (fn: (l: GLink) => number) => { strength: (fn: (l: GLink) => number) => void } }
       | undefined;
@@ -162,8 +162,8 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       ?.distance((l) => {
         const source = cache.get(endId(l.source));
         const target = cache.get(endId(l.target));
-        if (l.kind === "monitor") return source?.kind === "model" ? 560 : 320 + (source?.radius ?? 26) * 4;
-        if (l.kind === "member") return (source?.radius ?? 26) * 2.2 + (target?.radius ?? 11) * 2.6 + 30;
+        if (l.kind === "monitor") return source?.kind === "model" ? 1200 : 680 + (source?.radius ?? 42) * 4;
+        if (l.kind === "member") return (source?.radius ?? 42) * 2.4 + (target?.radius ?? 18) * 3.2 + 110;
         return 18;
       })
       .strength((l) => {
@@ -174,7 +174,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       });
     fg.d3Force(
       "collide",
-      forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 1.9 : 1.7) + 10).iterations(3) as never,
+      forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 2.3 : 2.1) + 40).iterations(3) as never,
     );
 
     const renderer = fg.renderer() as THREE.WebGLRenderer;
@@ -183,7 +183,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     // Deep-space background, star field and core dust, plus bloom so every light glows.
     const scene = fg.scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.FogExp2(BACKGROUND, 0.00028);
+    scene.fog = new THREE.FogExp2(BACKGROUND, 0.00013);
     const space = createSpace();
     spaceRef.current = space;
     scene.add(space.group);
@@ -298,7 +298,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     if (!Number.isFinite(radius) || radius * 2 < MIN_FIT_EXTENT) return false;
     const camera = fg.camera() as THREE.PerspectiveCamera;
     const tan = Math.tan((camera.fov * Math.PI) / 360);
-    const distance = Math.max(radius / tan, radius / (tan * camera.aspect)) * 1.02;
+    const distance = Math.max(radius / tan, radius / (tan * camera.aspect)) * 1.12;
     const dir = camera.position.clone().sub(center);
     if (dir.lengthSq() < 1) dir.set(0, 0, 1);
     const pos = center.clone().addScaledVector(dir.normalize(), distance);
