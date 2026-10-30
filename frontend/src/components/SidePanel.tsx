@@ -31,7 +31,7 @@ export default function SidePanel({
   const comparison = useMemo(() => (target ? compare(model, target) : null), [model, target]);
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-slate-800/80 bg-[#070c22]/95 backdrop-blur md:w-[380px]">
+    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-[#0d1015] md:w-[380px]">
       <header className="flex items-start gap-3 border-b border-slate-800 p-4">
         <span
           className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
@@ -57,9 +57,9 @@ export default function SidePanel({
             {!model.security
               ? "not read yet"
               : model.security.issues.length > 0
-                ? <span className="text-violet-300">{model.security.issues.length} flagged file(s)</span>
+                ? <span className="text-[#9d7fe0]">{model.security.issues.length} flagged file(s)</span>
                 : model.security.scanned
-                  ? <span className="text-emerald-400">no unsafe files</span>
+                  ? <span className="text-[#4fb38a]">no unsafe files</span>
                   : "scan pending at Hugging Face"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
@@ -87,19 +87,19 @@ export default function SidePanel({
           .map((k) => (
             <div key={k} className="rounded-lg bg-slate-800/60 px-3 py-2">
               <div className="text-[11px] text-slate-400">{METRIC_LABELS[k]}</div>
-              <div className="font-mono">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
+              <div className="tabular-nums">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
             </div>
           ))}
         {model.usage.download_count_24h != null && (
           <div className="rounded-lg bg-slate-800/60 px-3 py-2">
             <div className="text-[11px] text-slate-400">Downloads / day (30-day avg.)</div>
-            <div className="font-mono">{fmt(model.usage.download_count_24h)}</div>
+            <div className="tabular-nums">{fmt(model.usage.download_count_24h)}</div>
           </div>
         )}
         {model.usage.active_requests_est != null && (
           <div className="rounded-lg bg-slate-800/60 px-3 py-2">
             <div className="text-[11px] text-slate-400">Active requests (est.)</div>
-            <div className="font-mono">{fmt(model.usage.active_requests_est)}</div>
+            <div className="tabular-nums">{fmt(model.usage.active_requests_est)}</div>
           </div>
         )}
         <p className="col-span-2 text-[11px] leading-snug text-slate-500">
@@ -140,7 +140,7 @@ export default function SidePanel({
                   <span className="text-slate-400">{METRIC_LABELS[d.metric]}</span>
                   <span
                     className={
-                      d.better == null ? "text-slate-500" : d.better ? "text-emerald-400" : "text-rose-400"
+                      d.better == null ? "text-slate-500" : d.better ? "text-[#4fb38a]" : "text-[#d9645f]"
                     }
                   >
                     {d.label}

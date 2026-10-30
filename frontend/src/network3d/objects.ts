@@ -31,7 +31,7 @@ export interface NodeAnim {
   animate?: (t: number, motion: boolean) => void;
 }
 
-const ACCENT = new THREE.Color("#22d3ee");
+const ACCENT = new THREE.Color("#7fa7bd");
 
 function circleCanvas(size: number) {
   const canvas = document.createElement("canvas");
@@ -100,8 +100,8 @@ export class ResourcePool {
       return new THREE.MeshStandardMaterial({
         color: c,
         emissive: c,
-        emissiveIntensity: status === "unknown" ? 0.08 : 0.28,
-        roughness: 0.35,
+        emissiveIntensity: status === "unknown" ? 0.03 : 0.1,
+        roughness: 0.55,
         metalness: 0.1,
       });
     });
@@ -110,15 +110,15 @@ export class ResourcePool {
   providerShell(status: ModelStatus): THREE.MeshPhysicalMaterial {
     return this.material(`provider:${status}`, () =>
       new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color("#0b1730"),
+        color: new THREE.Color("#141922"),
         emissive: this.statusColor(status),
-        emissiveIntensity: 0.12,
+        emissiveIntensity: 0.05,
         roughness: 0.15,
         metalness: 0.2,
         clearcoat: 1,
         clearcoatRoughness: 0.2,
         transparent: true,
-        opacity: 0.38,
+        opacity: 0.3,
         depthWrite: false,
       }),
     );
@@ -139,10 +139,10 @@ export class ResourcePool {
 
     const drawInitials = () => {
       ctx.save();
-      ctx.fillStyle = "#0f2742";
+      ctx.fillStyle = "#1a1f27";
       ctx.fill();
-      ctx.fillStyle = "#a5f3fc";
-      ctx.font = `600 ${size * 0.34}px Inter, system-ui, sans-serif`;
+      ctx.fillStyle = "#c9d1db";
+      ctx.font = `600 ${size * 0.34}px "Inter Variable", Inter, system-ui, sans-serif`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       const initials = provider.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
@@ -175,9 +175,9 @@ export class ResourcePool {
     return texture;
   }
 
-  label(text: string, height: number, color = "#cbd5e1"): SpriteText {
+  label(text: string, height: number, color = "#9aa4b2"): SpriteText {
     const s = new SpriteText(text, height, color);
-    s.fontFace = "Inter, system-ui, sans-serif";
+    s.fontFace = '"Inter Variable", Inter, system-ui, sans-serif';
     s.fontWeight = "500";
     s.backgroundColor = false;
     s.padding = 0;
@@ -205,6 +205,12 @@ export class ResourcePool {
   }
 }
 
+/** Halos stay faint; only security incidents keep a visible glow so they stand out. */
+function haloOpacity(kind: GNode["kind"], status: ModelStatus): number {
+  if (status === "security_incident") return 0.22;
+  return kind === "provider" ? 0.07 : 0.05;
+}
+
 function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim {
   return {
     body,
@@ -228,9 +234,9 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     pool.sphere,
     pool.material("engine:core", () =>
       new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color("#0a2540"),
+        color: new THREE.Color("#121a24"),
         emissive: ACCENT,
-        emissiveIntensity: 0.28,
+        emissiveIntensity: 0.12,
         roughness: 0.1,
         metalness: 0.1,
         clearcoat: 1,
@@ -242,25 +248,25 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   );
   const heart = new THREE.Mesh(
     pool.sphere,
-    pool.material("engine:heart", () => new THREE.MeshBasicMaterial({ color: new THREE.Color("#5fd4e8") })),
+    pool.material("engine:heart", () => new THREE.MeshBasicMaterial({ color: new THREE.Color("#9cc3d1") })),
   );
-  heart.scale.setScalar(0.3);
+  heart.scale.setScalar(0.22);
   const shell = new THREE.Mesh(
     pool.shellGeo,
     pool.material("engine:shell", () =>
-      new THREE.MeshBasicMaterial({ color: new THREE.Color("#38bdf8"), wireframe: true, transparent: true, opacity: 0.14 }),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color("#8aa9bd"), wireframe: true, transparent: true, opacity: 0.06 }),
     ),
   );
   const ringA = new THREE.Mesh(
     pool.ringGeo,
     pool.material("engine:ringA", () =>
-      new THREE.MeshBasicMaterial({ color: new THREE.Color("#22d3ee"), transparent: true, opacity: 0.55 }),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color("#8aa9bd"), transparent: true, opacity: 0.22 }),
     ),
   );
   const ringB = new THREE.Mesh(
     pool.ringGeo,
     pool.material("engine:ringB", () =>
-      new THREE.MeshBasicMaterial({ color: new THREE.Color("#a78bfa"), transparent: true, opacity: 0.4 }),
+      new THREE.MeshBasicMaterial({ color: new THREE.Color("#8f8fb8"), transparent: true, opacity: 0.14 }),
     ),
   );
   ringA.rotation.x = Math.PI / 2.4;
@@ -273,14 +279,14 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
       map: pool.glow,
       color: ACCENT,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.08,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
     }),
     ),
   );
   halo.scale.setScalar(2.8);
-  const label = pool.label("LIVE ANALYSIS CORE", 0.2, "#a5f3fc");
+  const label = pool.label("LIVE ANALYSIS CORE", 0.16, "#94a3b8");
   label.position.y = -2.05;
 
   body.add(halo, core, heart, shell, ringA, ringB, label);
@@ -290,12 +296,12 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     if (!motion) return;
     const breathe = 1 + 0.035 * Math.sin(t * 1.3);
     core.scale.setScalar(breathe);
-    heart.scale.setScalar(0.3 + 0.03 * Math.sin(t * 2.1));
+    heart.scale.setScalar(0.22 + 0.02 * Math.sin(t * 2.1));
     shell.rotation.y = t * 0.08;
     shell.rotation.x = t * 0.03;
     ringA.rotation.z = t * 0.25;
     ringB.rotation.z = -t * 0.18;
-    (halo.material as THREE.SpriteMaterial).opacity = 0.26 + 0.06 * Math.sin(t * 1.3);
+    (halo.material as THREE.SpriteMaterial).opacity = 0.07 + 0.02 * Math.sin(t * 1.3);
   };
   group.userData.anim = anim;
   return group;
@@ -313,9 +319,9 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   logo.renderOrder = 1;
   const shell = new THREE.Mesh(pool.sphere, pool.providerShell(node.status));
   shell.renderOrder = 2;
-  const halo = new THREE.Sprite(pool.haloMaterial(node.status, 0.22));
+  const halo = new THREE.Sprite(pool.haloMaterial(node.status, haloOpacity("provider", node.status)));
   halo.scale.setScalar(2.5);
-  const label = pool.label(node.name, 0.42);
+  const label = pool.label(node.name, 0.34);
   label.position.y = -1.6;
 
   body.add(halo, logo, shell, label);
@@ -333,7 +339,7 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   const body = new THREE.Group();
   group.add(body);
   const core = new THREE.Mesh(pool.sphere, pool.modelMaterial(node.status));
-  const halo = new THREE.Sprite(pool.haloMaterial(node.status, 0.14));
+  const halo = new THREE.Sprite(pool.haloMaterial(node.status, haloOpacity("model", node.status)));
   halo.scale.setScalar(2.4);
   body.add(halo, core);
   const anim = baseAnim("model", node, body);
@@ -347,7 +353,7 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
 export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatus) {
   if (anim.status === status) return;
   anim.status = status;
-  if (anim.halo) anim.halo.material = pool.haloMaterial(status, anim.kind === "provider" ? 0.22 : 0.14);
+  if (anim.halo) anim.halo.material = pool.haloMaterial(status, haloOpacity(anim.kind, status));
   if (anim.core) anim.core.material = pool.modelMaterial(status);
   if (anim.shell) anim.shell.material = pool.providerShell(status);
 }

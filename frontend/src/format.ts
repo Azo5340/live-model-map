@@ -1,11 +1,11 @@
 import type { AIModel, Metrics, ModelStatus } from "./types";
 
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
-  operational: { color: "#34d399", label: "Operational" },
-  degraded: { color: "#fbbf24", label: "Degraded" },
-  down: { color: "#f43f5e", label: "Down" },
-  security_incident: { color: "#a855f7", label: "Security incident" },
-  unknown: { color: "#64748b", label: "Unknown" },
+  operational: { color: "#4fb38a", label: "Operational" },
+  degraded: { color: "#d4a948", label: "Degraded" },
+  down: { color: "#d9645f", label: "Down" },
+  security_incident: { color: "#9d7fe0", label: "Security incident" },
+  unknown: { color: "#5c6675", label: "Unknown" },
 };
 
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";

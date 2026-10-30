@@ -30,7 +30,7 @@ interface Props {
   reducedMotion: boolean;
 }
 
-const BACKGROUND = "#050816";
+const BACKGROUND = "#0b0d12";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
 const MIN_FIT_EXTENT = 250;
 
@@ -66,6 +66,14 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hovered, setHovered] = useState<GNode | null>(null);
+  // 3D labels are drawn into canvases once, so wait for Inter (max 2 s) before building the scene.
+  const [fontReady, setFontReady] = useState(false);
+  useEffect(() => {
+    const timeout = new Promise((r) => setTimeout(r, 2000));
+    Promise.race([document.fonts.load('500 48px "Inter Variable"'), timeout])
+      .catch(() => {})
+      .finally(() => setFontReady(true));
+  }, []);
   const pool = useMemo(() => new ResourcePool(), []);
   const cache = useRef(new Map<string, GNode>()).current;
   const objects = useRef(new Map<string, THREE.Group>()).current;
@@ -159,14 +167,14 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     // management with the bloom composer and stays deep navy.
     scene.background = new THREE.Color(BACKGROUND);
     scene.fog = new THREE.FogExp2(BACKGROUND, 0.0011);
-    const rim = new THREE.PointLight(new THREE.Color("#22d3ee"), 2.2, 0, 0);
-    const fill = new THREE.DirectionalLight(new THREE.Color("#a78bfa"), 0.6);
+    const rim = new THREE.PointLight(new THREE.Color("#cfd8e3"), 1.2, 0, 0);
+    const fill = new THREE.DirectionalLight(new THREE.Color("#8b95a7"), 0.5);
     fill.position.set(-300, 200, -200);
     scene.add(rim, fill);
 
     const composer = fg.postProcessingComposer();
     // Soft bloom: only bright cores and particles glow, the background stays dark.
-    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.42, 0.4, 0.45);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.16, 0.3, 0.75);
     composer.addPass(bloom);
 
     return () => {
@@ -178,7 +186,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     };
     // Size changes only matter for the first setup; the composer tracks resizes itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size.width > 0]);
+  }, [size.width > 0 && fontReady]);
 
   // One animation loop for all nodes (scale easing, idle float, pulses).
   useEffect(() => {
@@ -303,7 +311,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
 
   return (
     <div ref={containerRef} className="absolute inset-0" style={{ background: BACKGROUND }}>
-      {size.width > 0 && (
+      {size.width > 0 && fontReady && (
         <ForceGraph3D<GNode, GLink>
           ref={fgRef}
           width={size.width}
@@ -333,18 +341,18 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           linkTarget="target"
           linkColor={(l) =>
             isLit(l)
-              ? "#e0f2fe"
+              ? "#cbd5e1"
               : l.kind === "monitor"
                 ? linkStatusColor(l)
                 : l.kind === "lineage"
-                  ? "#a78bfa"
-                  : "#334155"
+                  ? "#6f7396"
+                  : "#262c36"
           }
-          linkOpacity={0.35}
-          linkWidth={(l) => (l.kind === "monitor" ? (isLit(l) ? 0.9 : 0.45) : 0)}
+          linkOpacity={0.22}
+          linkWidth={(l) => (l.kind === "monitor" ? (isLit(l) ? 0.6 : 0.3) : 0)}
           linkDirectionalParticles={(l) => (motion && l.kind === "monitor" ? l.particles : 0)}
-          linkDirectionalParticleSpeed={0.0035}
-          linkDirectionalParticleWidth={1.6}
+          linkDirectionalParticleSpeed={0.0025}
+          linkDirectionalParticleWidth={1}
           linkDirectionalParticleColor={linkStatusColor}
           linkDirectionalParticleResolution={6}
           d3AlphaDecay={0.025}

@@ -2,10 +2,10 @@ import { STATUS, statusOf } from "../format";
 import type { StreamEvent } from "../types";
 
 const STYLE: Record<StreamEvent["type"], { icon: string; cls: string; label: string }> = {
-  MODEL_ADDED: { icon: "✦", cls: "text-sky-300", label: "New model" },
-  METRICS_UPDATED: { icon: "↻", cls: "text-amber-300", label: "Metrics" },
-  STATUS_CHANGED: { icon: "●", cls: "text-violet-300", label: "Status change" },
-  ALERT: { icon: "⚠", cls: "text-rose-300", label: "Alert" },
+  MODEL_ADDED: { icon: "✦", cls: "text-slate-300", label: "New model" },
+  METRICS_UPDATED: { icon: "↻", cls: "text-slate-400", label: "Metrics" },
+  STATUS_CHANGED: { icon: "●", cls: "text-[#9d7fe0]", label: "Status change" },
+  ALERT: { icon: "⚠", cls: "text-[#d9645f]", label: "Alert" },
 };
 
 function statusText(e: StreamEvent): string | null {

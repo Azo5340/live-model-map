@@ -6,7 +6,7 @@ const KIND_COLOR: Record<TodoKind, string> = {
   security_incident: STATUS.security_incident.color,
   down: STATUS.down.color,
   degraded: STATUS.degraded.color,
-  new_model: "#38bdf8",
+  new_model: "#8ea4c4",
 };
 
 const STORAGE_KEY = "live-model-map:todo-done";
@@ -80,7 +80,7 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
                 type="checkbox"
                 checked={isDone}
                 onChange={() => toggle(item.id)}
-                className="mt-1 shrink-0 accent-sky-500"
+                className="mt-1 shrink-0 accent-slate-400"
                 aria-label={`Mark "${item.model_name}" as seen`}
               />
               <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(item.model_id)}>

@@ -95,7 +95,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-slate-800/80 bg-[#050816] px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-white/5 bg-[#0b0d12] px-4 py-2.5">
         <button
           className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 sm:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -105,7 +105,7 @@ export default function App() {
           ☰ <span className="text-xs">To review{todo.length ? ` (${todo.length})` : ""}</span>
         </button>
         <h1 className="font-semibold tracking-tight">
-          Live Model Map <span className="font-normal text-cyan-400/80">· AI observability</span>
+          Live Model Map <span className="font-normal text-slate-500">· AI observability</span>
         </h1>
         <span className="hidden text-sm text-slate-500 md:inline">
           {models.size} models · {Object.keys(providers).length} providers
@@ -115,7 +115,7 @@ export default function App() {
           <span className="hidden items-center gap-1.5 text-xs text-slate-400 sm:flex" title={loadError ?? undefined}>
             <span
               className={`h-2 w-2 rounded-full ${
-                fetchState === "error" || stale ? "bg-rose-500" : fetchState === "loading" ? "bg-amber-400" : "bg-emerald-400"
+                fetchState === "error" || stale ? "bg-[#d9645f]" : fetchState === "loading" ? "bg-[#d4a948]" : "bg-[#4fb38a]"
               }`}
             />
             {fetchState === "error"
@@ -131,7 +131,7 @@ export default function App() {
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-slate-800/80 bg-[#060a1c] sm:static sm:flex sm:w-56 lg:w-72`}
+          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#0d1015] sm:static sm:flex sm:w-56 lg:w-72`}
         >
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
@@ -176,12 +176,12 @@ export default function App() {
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-            <div className="pointer-events-auto hidden rounded-xl border border-slate-800/80 bg-[#050816]/80 px-3 py-2 text-xs backdrop-blur sm:block">
+            <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#0d1015]/90 px-3 py-2 text-xs sm:block">
               {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color, boxShadow: `0 0 8px ${STATUS[k].color}` }} />
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color }} />
                   <span className="text-slate-300">{STATUS[k].label}</span>
-                  <span className="ml-auto pl-3 font-mono text-slate-500">{statusCounts[k]}</span>
+                  <span className="ml-auto pl-3 tabular-nums text-slate-500">{statusCounts[k]}</span>
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
@@ -191,7 +191,7 @@ export default function App() {
             {webgl && (
               <button
                 onClick={() => network.current?.resetCamera()}
-                className="pointer-events-auto rounded-lg border border-slate-800 bg-[#050816]/80 px-3 py-1.5 text-xs text-slate-300 backdrop-blur hover:border-cyan-500/40 hover:text-cyan-300"
+                className="pointer-events-auto rounded-lg border border-white/5 bg-[#0d1015]/90 px-3 py-1.5 text-xs text-slate-300 hover:border-white/15 hover:text-slate-100"
               >
                 Reset view
               </button>
@@ -199,12 +199,12 @@ export default function App() {
           </div>
 
           {fetchState === "error" && models.size === 0 && (
-            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-rose-950/95 px-3 py-2 text-sm text-rose-200 sm:right-auto sm:max-w-md">
+            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg border border-white/5 bg-[#1a1416] px-3 py-2 text-sm text-[#e3b5b2] sm:right-auto sm:max-w-md">
               No data found: the first check-up may not have run yet. ({loadError})
             </div>
           )}
           {stale && (
-            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-amber-950/95 px-3 py-2 text-sm text-amber-200 sm:right-auto sm:max-w-md">
+            <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg border border-white/5 bg-[#1a1712] px-3 py-2 text-sm text-[#e0c78f] sm:right-auto sm:max-w-md">
               No check-up for {ago(lastCheckup.ts).replace(" ago", "")}. GitHub may have paused the workflow
               (see the repository's Actions tab).
             </div>
