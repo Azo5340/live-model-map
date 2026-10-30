@@ -48,18 +48,20 @@ live-model-map/
 - **Models** orbit their provider, colored by status; violet links = real lineage (`base_model`).
 - **Volume**: radius ∝ cube root of downloads/day (so the sphere's volume is proportional to the
   real volume), clamped to a min and max, with animated size changes.
-- **Light pulses**: every provider *and* every model is linked to the core by a stream on which
-  comet-like pulses of light travel into the center. Pulse rate and stream width follow the real
-  download volume (log scale), the color follows the status. No traffic between models is made up.
-- **Fluid nodes**: models are luminous orbs and providers show their logo inside a glowing status
-  ring; nodes breathe gently and wobble like a drop each time they send a pulse.
+- **Light trains**: every provider *and* every model is linked to the core by a stream on which a
+  short train of light (a bright headlight followed by a few cars) rolls into the center. Train
+  rate and stream width follow the real download volume (log scale), the color follows the status.
+  No traffic between models is made up.
+- **Fluid nodes**: models are large luminous orbs and providers show their logo inside a glowing
+  status ring; nodes breathe gently, wobble like a drop when a train leaves, and are drawn toward
+  the core while it travels, springing back as it arrives.
 - **Bright core**: a white starburst core that gains energy and sends out ripples as pulses
   arrive, so it shines more when there is more activity.
 - **Style**: deep-space background with a star field and glowing dust around the core, thin
   luminous filaments, selective bloom (only the brightest points glow, logos stay readable),
   a blue/violet palette where degraded, down and security incidents stand out, Inter for text.
 - Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
-  rotate / zoom / pan, hover tooltips, click (details panel + camera fly-to), "Reset view".
+  rotate / zoom / pan, a wide airy layout framed to fill the view, hover tooltips, click (details panel + camera fly-to), "Reset view".
 - Performance: shared geometries, materials and textures disposed on unmount, a single animation
   loop, capped pixel ratio, rendering paused while the tab is hidden. With the OS "reduce motion"
   setting the float, wobble, pulses and ripples stand still.

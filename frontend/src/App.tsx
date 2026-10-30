@@ -185,7 +185,7 @@ export default function App() {
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
-                Volume ∝ downloads/day (radius ∝ cube root). Light pulses stream into the core; their rate and width follow that volume.
+                Volume ∝ downloads/day (radius ∝ cube root). Trains of light roll into the core; their rate and width follow that volume.
               </div>
             </div>
             {webgl && (

@@ -35,13 +35,13 @@ export interface GLink {
 }
 
 export const ENGINE_ID = "__engine__";
-export const ENGINE_RADIUS = 24;
+export const ENGINE_RADIUS = 46;
 
 // Radius grows with the cube root of volume (so the sphere's *volume* is
 // proportional to downloads), clamped so small nodes stay visible.
 const SIZES: Record<"provider" | "model", { min: number; max: number }> = {
-  provider: { min: 11, max: 30 },
-  model: { min: 3.6, max: 11 },
+  provider: { min: 26, max: 58 },
+  model: { min: 11, max: 26 },
 };
 
 export function radiusFor(kind: "provider" | "model", volume: number, maxVolume: number): number {

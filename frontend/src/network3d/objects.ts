@@ -33,6 +33,9 @@ export interface NodeAnim {
   /** Fluid wobble: strength (decays) and time since the last kick. */
   wobble: number;
   wobbleAge: number;
+  /** How far the node is drawn toward the core (0..1) while its light train travels, and which way. */
+  pull: number;
+  pullDir: THREE.Vector3;
   disc?: THREE.Sprite;
   ring?: THREE.Sprite;
   glow?: THREE.Sprite;
@@ -75,24 +78,32 @@ const FLOW_VERTEX = /* glsl */ `
   }
 `;
 
-// A dim stream with a comet of light travelling from source (v = 0) to target
-// (v = 1): bright head, exponential tail. The head position uses the same
-// formula as pulseHead() so nodes can react exactly when a pulse leaves.
+// A dim stream with a *train* of light travelling from source (v = 0) to target
+// (v = 1): a bright headlight followed by a few cars, measured in scene units so
+// they look the same on short and long links. The head position uses the same
+// formula as pulseHead() so nodes move in step with their train.
 const FLOW_FRAGMENT = /* glsl */ `
   uniform float uTime;
   uniform float uRate;
   uniform float uPhase;
   uniform float uOpacity;
+  uniform float uLength;
   uniform vec3 uColor;
   varying vec2 vUv;
+  const float TRAIN = 70.0;   // train length, scene units
+  const float CAR = 14.0;     // car + gap length
   void main() {
     float head = fract(uTime * uRate + uPhase);
-    float behind = head - vUv.y;
-    float tail = behind >= 0.0 ? exp(-behind * 9.0) : 0.0;
-    float spark = exp(-abs(behind) * 60.0);
-    float ends = smoothstep(0.0, 0.04, vUv.y) * smoothstep(0.0, 0.04, 1.0 - vUv.y);
-    float light = 0.1 + 0.85 * tail + 1.1 * spark;
-    vec3 color = mix(uColor, vec3(1.0), 0.55 * spark + 0.2 * tail);
+    float behind = (head - vUv.y) * uLength;            // distance behind the headlight
+    float inTrain = step(0.0, behind) * step(behind, TRAIN);
+    float c = fract(behind / CAR);
+    float car = smoothstep(0.0, 0.12, c) * smoothstep(0.78, 0.6, c);
+    float fade = 1.0 - 0.65 * clamp(behind / TRAIN, 0.0, 1.0);
+    float train = inTrain * car * fade;
+    float headlight = exp(-abs(behind) * 0.35);
+    float ends = smoothstep(0.0, 0.03, vUv.y) * smoothstep(0.0, 0.03, 1.0 - vUv.y);
+    float light = 0.09 + 1.05 * train + 1.5 * headlight;
+    vec3 color = mix(uColor, vec3(1.0), clamp(0.7 * headlight + 0.25 * train, 0.0, 1.0));
     gl_FragColor = vec4(color * light, uOpacity * ends);
   }
 `;
@@ -313,6 +324,7 @@ export class ResourcePool {
           uRate: { value: rate },
           uPhase: { value: phase },
           uOpacity: { value: STREAM_OPACITY },
+          uLength: { value: 100 },
           uColor: { value: new THREE.Color(color) },
         },
         vertexShader: FLOW_VERTEX,
@@ -363,6 +375,8 @@ function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim
     status: node.status,
     wobble: 0,
     wobbleAge: 0,
+    pull: 0,
+    pullDir: new THREE.Vector3(),
   };
 }
 
@@ -552,9 +566,13 @@ export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boole
     sx = 1 + jelly + breathe;
     sy = 1 - jelly + breathe2;
     flash = w;
-    const amp = anim.kind === "provider" ? 1 : 0.5;
-    anim.body.position.y = Math.sin(t * 0.5 + anim.phase) * amp;
-    anim.body.position.x = Math.cos(t * 0.4 + anim.phase) * amp * 0.5;
+    const amp = anim.kind === "provider" ? 1.5 : 0.8;
+    anim.body.position.set(Math.cos(t * 0.4 + anim.phase) * amp * 0.5, Math.sin(t * 0.5 + anim.phase) * amp, 0);
+    // Drawn toward the core while its train travels, then springing back.
+    anim.body.position.addScaledVector(anim.pullDir, anim.pull * anim.radius * 0.9);
+    // Stretched along the pull, like a drop being tugged.
+    sy += 0.12 * anim.pull;
+    sx -= 0.06 * anim.pull;
   } else {
     anim.body.position.set(0, 0, 0);
   }
@@ -609,4 +627,5 @@ export function placeStream(
   mesh.quaternion.setFromUnitVectors(UP, dir);
   const width = mesh.userData.width as number;
   mesh.scale.set(width, length, width);
+  (mesh.material as THREE.ShaderMaterial).uniforms.uLength.value = length;
 }

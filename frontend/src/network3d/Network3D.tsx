@@ -39,7 +39,7 @@ interface Props {
 
 const BACKGROUND = "#02030a";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
-const MIN_FIT_EXTENT = 250;
+const MIN_FIT_EXTENT = 500;
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -154,7 +154,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     if (!fg || size.width === 0) return;
 
     const charge = fg.d3Force("charge") as unknown as { strength: (fn: (n: GNode) => number) => void } | undefined;
-    charge?.strength((n) => (n.kind === "engine" ? -250 : n.kind === "provider" ? -70 : -6));
+    charge?.strength((n) => (n.kind === "engine" ? -900 : n.kind === "provider" ? -320 : -55));
     const link = fg.d3Force("link") as unknown as
       | { distance: (fn: (l: GLink) => number) => { strength: (fn: (l: GLink) => number) => void } }
       | undefined;
@@ -162,8 +162,8 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       ?.distance((l) => {
         const source = cache.get(endId(l.source));
         const target = cache.get(endId(l.target));
-        if (l.kind === "monitor") return source?.kind === "model" ? 170 : 95 + (source?.radius ?? 10) * 2.5;
-        if (l.kind === "member") return (source?.radius ?? 10) * 1.6 + (target?.radius ?? 2) * 2 + 6;
+        if (l.kind === "monitor") return source?.kind === "model" ? 560 : 320 + (source?.radius ?? 26) * 4;
+        if (l.kind === "member") return (source?.radius ?? 26) * 2.2 + (target?.radius ?? 11) * 2.6 + 30;
         return 18;
       })
       .strength((l) => {
@@ -174,7 +174,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       });
     fg.d3Force(
       "collide",
-      forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 2.2 : 1.6) + 2).iterations(2) as never,
+      forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 1.9 : 1.7) + 10).iterations(3) as never,
     );
 
     const renderer = fg.renderer() as THREE.WebGLRenderer;
@@ -183,7 +183,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     // Deep-space background, star field and core dust, plus bloom so every light glows.
     const scene = fg.scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.FogExp2(BACKGROUND, 0.0006);
+    scene.fog = new THREE.FogExp2(BACKGROUND, 0.00028);
     const space = createSpace();
     spaceRef.current = space;
     scene.add(space.group);
@@ -218,11 +218,18 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
         const core = objects.get(ENGINE_ID)?.userData.receive as ((n: number) => void) | undefined;
         for (const flow of flows.values()) {
           const head = pulseHead(t, flow.mesh.userData.rate, flow.mesh.userData.phase);
+          const group = objects.get(endId(flow.link.source));
+          const source = group?.userData.anim as NodeAnim | undefined;
+          const fromProvider = source?.kind === "provider";
           if (head < flow.head) {
-            const source = objects.get(endId(flow.link.source))?.userData.anim as NodeAnim | undefined;
-            const fromProvider = source?.kind === "provider";
             if (source) kick(source, fromProvider ? 0.9 : 0.7);
             core?.(fromProvider ? 0.08 : 0.025);
+          }
+          if (source && group) {
+            // Pulled toward the core as the train rolls out, released as it arrives.
+            const s = Math.sin(Math.PI * head);
+            source.pull = s * s;
+            source.pullDir.copy(group.position).multiplyScalar(-1).normalize();
           }
           flow.head = head;
         }
@@ -277,35 +284,63 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     fg.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, { x: target.x, y: target.y, z: target.z }, ms);
   }, []);
 
-  const resetCamera = useCallback(() => {
-    fitted.current = true;
-    fgRef.current?.zoomToFit(1000, 40);
-  }, []);
-
-  // Frame the network once the layout has spread out. Fitting too early (nodes
-  // still bunched at the origin) would put the camera inside the core's glow.
-  const fitWhenSpread = useCallback((ms: number) => {
+  /**
+   * Frames the whole network so it fills the view. The library's zoomToFit fits
+   * the 3D bounding box (depth included) and leaves a lot of empty space; this
+   * fits the network's radius to the field of view instead.
+   */
+  const frame = useCallback((ms: number) => {
     const fg = fgRef.current;
     const box = fg?.getGraphBbox();
     if (!fg || !box) return false;
-    const extent = Math.max(box.x[1] - box.x[0], box.y[1] - box.y[0], box.z[1] - box.z[0]);
-    if (!Number.isFinite(extent) || extent < MIN_FIT_EXTENT) return false;
-    fg.zoomToFit(ms, 40);
+    const center = new THREE.Vector3((box.x[0] + box.x[1]) / 2, (box.y[0] + box.y[1]) / 2, (box.z[0] + box.z[1]) / 2);
+    const radius = Math.max(box.x[1] - box.x[0], box.y[1] - box.y[0], box.z[1] - box.z[0]) / 2;
+    if (!Number.isFinite(radius) || radius * 2 < MIN_FIT_EXTENT) return false;
+    const camera = fg.camera() as THREE.PerspectiveCamera;
+    const tan = Math.tan((camera.fov * Math.PI) / 360);
+    const distance = Math.max(radius / tan, radius / (tan * camera.aspect)) * 1.02;
+    const dir = camera.position.clone().sub(center);
+    if (dir.lengthSq() < 1) dir.set(0, 0, 1);
+    const pos = center.clone().addScaledVector(dir.normalize(), distance);
+    fg.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, { x: center.x, y: center.y, z: center.z }, ms);
     return true;
   }, []);
 
+  const resetCamera = useCallback(() => {
+    fitted.current = true;
+    frame(1000);
+  }, [frame]);
+
+  // Frame the network once the layout has spread out. Fitting too early (nodes
+  // still bunched at the origin) would put the camera inside the core's glow.
+  const fitWhenSpread = frame;
+
+  // Keep re-framing while the layout settles (it first expands, then contracts),
+  // until the user takes over the camera.
   const hasNodes = graph.nodes.length > 1;
   useEffect(() => {
     if (!hasNodes || fitted.current) return;
     let tries = 0;
     let id: number;
     const attempt = () => {
-      if (fitted.current || fitWhenSpread(800) || ++tries > 20) return;
-      id = window.setTimeout(attempt, 750);
+      if (fitted.current || ++tries > 12) return;
+      fitWhenSpread(700);
+      id = window.setTimeout(attempt, 1200);
     };
     id = window.setTimeout(attempt, 1200);
     return () => window.clearTimeout(id);
   }, [hasNodes, fitWhenSpread]);
+
+  // Any rotate / zoom / pan by the user stops the automatic framing.
+  useEffect(() => {
+    const controls = fgRef.current?.controls() as THREE.EventDispatcher<{ start: object }> | undefined;
+    if (!controls) return;
+    const stop = () => {
+      fitted.current = true;
+    };
+    controls.addEventListener("start", stop);
+    return () => controls.removeEventListener("start", stop);
+  }, [size.width > 0 && fontReady]);
   useImperativeHandle(ref, () => ({ resetCamera }), [resetCamera]);
 
   // Selecting a model (here or from the side lists) flies the camera to it.
@@ -356,7 +391,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const status = end(l.source)?.status ?? "unknown";
       const provider = end(l.source)?.kind === "provider";
       const width = provider ? 0.4 + 0.8 * l.activity : 0.12 + 0.28 * l.activity;
-      const rate = provider ? 0.18 + 0.32 * l.activity : 0.08 + 0.22 * l.activity; // pulses per second
+      const rate = provider ? 0.1 + 0.16 * l.activity : 0.05 + 0.11 * l.activity; // trains per second
       const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random());
       const old = flows.get(l.id);
       if (old) (old.mesh.userData.dispose as () => void)();
@@ -419,6 +454,9 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           cooldownTicks={250}
           onEngineStop={() => {
             if (!fitted.current && fitWhenSpread(900)) fitted.current = true;
+          }}
+          onNodeDrag={() => {
+            fitted.current = true;
           }}
         />
       )}
