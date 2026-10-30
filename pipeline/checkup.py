@@ -73,10 +73,10 @@ def _fetch_previous(url: str, name: str):
     except urllib.error.HTTPError as e:
         if e.code == 404:  # site not published yet: first run
             return None
-        raise SystemExit(f"Impossible de lire l'état précédent ({name}.json, HTTP {e.code}) : passe annulée.")
+        raise SystemExit(f"Could not read the previous state ({name}.json, HTTP {e.code}): pass cancelled.")
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
         # Never start from scratch because of a network blip: that would wipe the history.
-        raise SystemExit(f"Impossible de lire l'état précédent ({name}.json) : {e}. Passe annulée.")
+        raise SystemExit(f"Could not read the previous state ({name}.json): {e}. Pass cancelled.")
 
 
 def load_previous(out: Path, url: str | None) -> dict:
@@ -98,11 +98,11 @@ def load_overrides() -> tuple[dict[str, dict], list[str]]:
     try:
         models = json.loads(OVERRIDES_FILE.read_text()).get("models", {})
     except json.JSONDecodeError as e:
-        return {}, [f"status_overrides.json illisible : {e}"]
+        return {}, [f"status_overrides.json is not valid JSON: {e}"]
     valid, errors = {}, []
     for model_id, entry in models.items():
         if entry.get("status") not in STATUSES:
-            errors.append(f"status_overrides.json : état invalide pour {model_id} ({entry.get('status')})")
+            errors.append(f"status_overrides.json: invalid status for {model_id} ({entry.get('status')})")
             continue
         valid[model_id.lower()] = entry
     return valid, errors
@@ -137,7 +137,7 @@ def collect(previous_models: dict, previous_providers: dict, full: bool, errors:
         openrouter = fetch_openrouter()
     except Exception as e:  # noqa: BLE001 - one source down must not stop the pass
         openrouter = {}
-        errors.append(f"OpenRouter (catalogue) : {e}")
+        errors.append(f"OpenRouter (catalogue): {e}")
 
     fetched: dict[str, dict] = {}
     # Once Hugging Face answers 429 (rate limit), stop asking for this pass: what's
@@ -155,12 +155,12 @@ def collect(previous_models: dict, previous_providers: dict, full: bool, errors:
                 hf_limit["hit"] = True
                 hf_limit["postponed"] += 1
             else:
-                errors.append(f"Hugging Face {label} : {e}")
+                errors.append(f"Hugging Face {label}: {e}")
         except Exception as e:  # noqa: BLE001 - one source down must not stop the pass
-            errors.append(f"Hugging Face {label} : {e}")
+            errors.append(f"Hugging Face {label}: {e}")
         return None
 
-    for model in hf_call("(tendances)", hf.list_models, "text-generation", "trendingScore", TRENDING_LIMIT) or []:
+    for model in hf_call("(trending)", hf.list_models, "text-generation", "trendingScore", TRENDING_LIMIT) or []:
         fetched[model["id"]] = model
 
     def fetch_all(repo_ids):
@@ -210,8 +210,8 @@ def collect(previous_models: dict, previous_providers: dict, full: bool, errors:
 
     if hf_limit["hit"]:
         errors.append(
-            f"Hugging Face : limite de requêtes atteinte, {hf_limit['postponed']} requêtes "
-            "reportées à la prochaine passe (ajoute un HF_TOKEN pour un quota plus large)"
+            f"Hugging Face: rate limit reached, {hf_limit['postponed']} requests "
+            "postponed to the next pass (add an HF_TOKEN for a larger quota)"
         )
 
     # Live status for every model OpenRouter serves (new and already known).
@@ -232,7 +232,7 @@ def load_arena(previous: dict | None, full: bool, now: datetime, errors: list[st
     try:
         return {**fetch_ratings(), "fetched_at": iso(now)}
     except Exception as e:  # noqa: BLE001 - one source down must not stop the pass
-        errors.append(f"LMArena : {e}")
+        errors.append(f"LMArena: {e}")
         return previous
 
 
@@ -258,10 +258,10 @@ def public(model: dict) -> dict:
 
 def build_todo(models: list[dict], now: datetime) -> list[dict]:
     titles = {
-        "security_incident": "Faille de sécurité",
-        "down": "En panne",
-        "degraded": "Dégradé",
-        "new_model": "Nouveau modèle",
+        "security_incident": "Security incident",
+        "down": "Down",
+        "degraded": "Degraded",
+        "new_model": "New model",
     }
     items = []
     for m in models:
@@ -348,9 +348,9 @@ def checkup(out: Path, previous_url: str | None) -> dict:
         issues = (m.get("security") or {}).get("issues") or []
         if issues:
             files = ", ".join(f"{i['path']} ({i['level']})" for i in issues[:3])
-            more = f" et {len(issues) - 3} autre(s)" if len(issues) > 3 else ""
+            more = f" and {len(issues) - 3} more" if len(issues) > 3 else ""
             m["status"] = "security_incident"
-            m["status_detail"] = f"Détecté automatiquement par Hugging Face : {files}{more}"
+            m["status_detail"] = f"Flagged automatically by Hugging Face: {files}{more}"
         override = overrides.get(mid.lower())
         if override:
             m["status"], m["status_detail"] = override["status"], override.get("detail")
@@ -358,7 +358,7 @@ def checkup(out: Path, previous_url: str | None) -> dict:
         m.setdefault("status_detail", None)
 
     for model_id in overrides.keys() - {k.lower() for k in merged}:
-        errors.append(f"status_overrides.json : modèle inconnu {model_id}")
+        errors.append(f"status_overrides.json: unknown model {model_id}")
 
     # Forget models no source has returned for a long time (unless flagged by hand).
     cutoff = started - FORGET_AFTER
@@ -445,9 +445,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     r = checkup(args.out, args.previous_url)
-    print(f"Check-up {r['ts']} ({'complet' if r['full'] else 'rapide'}, {r['duration_s']} s) : "
-          f"{r['total']} modèles, {r['checked_status']} états vérifiés, "
-          f"{r['added_count']} nouveaux, {len(r['status_changes'])} changements d'état, "
-          f"{r['error_count']} erreurs")
+    print(f"Check-up {r['ts']} ({'full' if r['full'] else 'quick'}, {r['duration_s']} s): "
+          f"{r['total']} models, {r['checked_status']} statuses checked, "
+          f"{r['added_count']} new, {len(r['status_changes'])} status changes, "
+          f"{r['error_count']} errors")
     for err in r["errors"]:
         print("  !", err)

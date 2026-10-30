@@ -53,7 +53,7 @@ def fetch_status(openrouter_id: str) -> tuple[str, str, float] | None:
     except (urllib.error.URLError, TimeoutError, KeyError, TypeError, json.JSONDecodeError):
         return None
     if not endpoints:
-        return "down", "Aucun fournisseur ne sert ce modèle sur OpenRouter", 0.0
+        return "down", "No provider serves this model on OpenRouter", 0.0
 
     uptimes = [
         e.get("uptime_last_30m") if e.get("uptime_last_30m") is not None else e.get("uptime_last_5m")
@@ -64,7 +64,7 @@ def fetch_status(openrouter_id: str) -> tuple[str, str, float] | None:
         return None
     best = max(uptimes)
     healthy = sum(1 for u in uptimes if u >= 95)
-    detail = f"{healthy}/{len(endpoints)} fournisseurs OK, meilleure dispo 30 min : {best:.0f}%"
+    detail = f"{healthy}/{len(endpoints)} providers OK, best 30-min availability: {best:.0f}%"
     availability = round(float(best), 1)
     if best >= 95:
         return "operational", detail, availability

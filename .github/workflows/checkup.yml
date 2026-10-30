@@ -1,4 +1,4 @@
-name: Check-up et publication
+name: Check-up and publish
 
 on:
   # Every 10 minutes. GitHub may start a scheduled run a few minutes late.
@@ -43,13 +43,13 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Check-up des modèles
+      - name: Model check-up
         env:
           # Optional repository secret: a free Hugging Face token raises the rate limit.
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python pipeline/checkup.py --out frontend/public/data --previous-url "${{ steps.pages.outputs.base_url }}/data"
 
-      - name: Construction du site
+      - name: Build the site
         working-directory: frontend
         run: |
           npm ci --no-audit --no-fund

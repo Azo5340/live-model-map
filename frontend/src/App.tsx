@@ -66,7 +66,7 @@ export default function App() {
 
   const { state: fetchState, error: loadError } = useLiveData(onSnapshot);
 
-  // Refresh the "il y a X min" labels.
+  // Refresh the "X min ago" labels.
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 30_000);
     return () => window.clearInterval(id);
@@ -88,8 +88,8 @@ export default function App() {
   // Each pass should land every ~10 min; well past that, GitHub probably skipped or paused it.
   const stale = lastCheckup && Date.now() - new Date(lastCheckup.ts).getTime() > 40 * 60_000;
   const tabs: { id: Tab; label: string }[] = [
-    { id: "todo", label: "À traiter" },
-    { id: "events", label: "Fil" },
+    { id: "todo", label: "To review" },
+    { id: "events", label: "Feed" },
     { id: "checkups", label: "Check-ups" },
   ];
 
@@ -100,15 +100,15 @@ export default function App() {
           className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 sm:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
           aria-expanded={sidebarOpen}
-          aria-label="Afficher À traiter, Fil et Check-ups"
+          aria-label="Show To review, Feed and Check-ups"
         >
-          ☰ <span className="text-xs">À traiter{todo.length ? ` (${todo.length})` : ""}</span>
+          ☰ <span className="text-xs">To review{todo.length ? ` (${todo.length})` : ""}</span>
         </button>
         <h1 className="font-semibold tracking-tight">
           Live Model Map <span className="font-normal text-cyan-400/80">· AI observability</span>
         </h1>
         <span className="hidden text-sm text-slate-500 md:inline">
-          {models.size} modèles · {Object.keys(providers).length} fournisseurs
+          {models.size} models · {Object.keys(providers).length} providers
         </span>
 
         <div className="ml-auto flex items-center gap-3">
@@ -119,10 +119,10 @@ export default function App() {
               }`}
             />
             {fetchState === "error"
-              ? "Données injoignables"
+              ? "Data unreachable"
               : lastCheckup
-                ? `Dernier check-up ${ago(lastCheckup.ts)}`
-                : "Chargement…"}
+                ? `Last check-up ${ago(lastCheckup.ts)}`
+                : "Loading…"}
           </span>
         </div>
       </header>
@@ -155,7 +155,7 @@ export default function App() {
 
         <main className="relative min-w-0 flex-1 overflow-hidden">
           {webgl ? (
-            <Suspense fallback={<div className="absolute inset-0 grid place-items-center text-sm text-slate-500">Chargement du réseau 3D…</div>}>
+            <Suspense fallback={<div className="absolute inset-0 grid place-items-center text-sm text-slate-500">Loading the 3D network…</div>}>
               <Network3D
                 ref={network}
                 models={models}
@@ -169,8 +169,8 @@ export default function App() {
           ) : (
             <div className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-slate-400">
               <p className="max-w-sm">
-                Ce navigateur ne prend pas en charge WebGL, nécessaire au réseau 3D. Les listes à gauche restent
-                disponibles ; cliquer sur un modèle ouvre ses détails.
+                This browser doesn't support WebGL, which the 3D network needs. The lists on the left still
+                work; clicking a model opens its details.
               </p>
             </div>
           )}
@@ -185,7 +185,7 @@ export default function App() {
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
-                Volume ∝ téléchargements/jour (rayon ∝ racine cubique). Particules : flux vers le noyau selon ce volume.
+                Volume ∝ downloads/day (radius ∝ cube root). Particles: flow into the core, scaled by that volume.
               </div>
             </div>
             {webgl && (
@@ -193,25 +193,25 @@ export default function App() {
                 onClick={() => network.current?.resetCamera()}
                 className="pointer-events-auto rounded-lg border border-slate-800 bg-[#050816]/80 px-3 py-1.5 text-xs text-slate-300 backdrop-blur hover:border-cyan-500/40 hover:text-cyan-300"
               >
-                Recentrer la vue
+                Reset view
               </button>
             )}
           </div>
 
           {fetchState === "error" && models.size === 0 && (
             <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-rose-950/95 px-3 py-2 text-sm text-rose-200 sm:right-auto sm:max-w-md">
-              Données introuvables : le premier check-up n'a peut-être pas encore tourné. ({loadError})
+              No data found: the first check-up may not have run yet. ({loadError})
             </div>
           )}
           {stale && (
             <div className="absolute bottom-10 left-3 right-3 z-10 rounded-lg bg-amber-950/95 px-3 py-2 text-sm text-amber-200 sm:right-auto sm:max-w-md">
-              Pas de check-up depuis {ago(lastCheckup.ts).replace("il y a ", "")}. GitHub a peut-être mis le robot en pause
-              (onglet Actions du dépôt).
+              No check-up for {ago(lastCheckup.ts).replace(" ago", "")}. GitHub may have paused the workflow
+              (see the repository's Actions tab).
             </div>
           )}
           {webgl && (
             <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
-              Glisser : pivoter · Molette : zoom · Clic droit : déplacer · Clic sur un modèle : détails
+              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a model: details
             </p>
           )}
         </main>

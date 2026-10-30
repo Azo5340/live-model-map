@@ -1,11 +1,11 @@
 import type { AIModel, Metrics, ModelStatus } from "./types";
 
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
-  operational: { color: "#34d399", label: "Fonctionne" },
-  degraded: { color: "#fbbf24", label: "Dégradé" },
-  down: { color: "#f43f5e", label: "En panne" },
-  security_incident: { color: "#a855f7", label: "Faille de sécurité" },
-  unknown: { color: "#64748b", label: "État inconnu" },
+  operational: { color: "#34d399", label: "Operational" },
+  degraded: { color: "#fbbf24", label: "Degraded" },
+  down: { color: "#f43f5e", label: "Down" },
+  security_incident: { color: "#a855f7", label: "Security incident" },
+  unknown: { color: "#64748b", label: "Unknown" },
 };
 
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";
@@ -15,28 +15,28 @@ export const volumeOf = (m: AIModel): number | null =>
   m.usage.active_requests_est ?? m.usage.download_count_24h;
 
 export const METRIC_LABELS: Record<keyof Metrics, string> = {
-  tokens_per_sec: "Vitesse (tok/s)",
-  latency_ms: "Latence (ms)",
-  cost_per_1k_tokens: "Coût / 1k tok ($)",
-  context_window: "Contexte (tok)",
+  tokens_per_sec: "Speed (tok/s)",
+  latency_ms: "Latency (ms)",
+  cost_per_1k_tokens: "Cost / 1k tok ($)",
+  context_window: "Context (tok)",
   elo_score: "ELO (LMArena)",
-  availability_pct: "Disponibilité 30 min (%)",
+  availability_pct: "Availability 30 min (%)",
 };
 
-/** "il y a 3 min", "il y a 2 h"… */
+/** "3 min ago", "2 h ago"… */
 export function ago(iso: string, now = Date.now()): string {
   const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  if (s < 60) return "à l'instant";
-  if (s < 3600) return `il y a ${Math.round(s / 60)} min`;
-  if (s < 86400) return `il y a ${Math.round(s / 3600)} h`;
-  return `il y a ${Math.round(s / 86400)} j`;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86400)} d ago`;
 }
 
 export function fmt(n: number | null | undefined, digits = 0): string {
   if (n == null) return "—";
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (Math.abs(n) >= 10_000) return `${(n / 1000).toFixed(0)}k`;
-  return n.toLocaleString("fr-FR", { maximumFractionDigits: digits });
+  return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
 const PROVIDER_COLORS = ["#38bdf8", "#a78bfa", "#f472b6", "#34d399", "#fbbf24", "#fb7185", "#60a5fa"];

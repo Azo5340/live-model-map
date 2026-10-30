@@ -41,9 +41,9 @@ export default function SidePanel({
           <h2 className="truncate text-lg font-semibold">{model.name}</h2>
           <p className="text-sm text-slate-400">
             {model.provider}
-            {model.release_date ? ` · sorti le ${model.release_date}` : ""}
+            {model.release_date ? ` · released ${model.release_date}` : ""}
           </p>
-          {parent && <p className="text-xs text-slate-500">dérivé de {parent.name}</p>}
+          {parent && <p className="text-xs text-slate-500">derived from {parent.name}</p>}
           <div
             className="mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
             style={{ color: STATUS[statusOf(model)].color, background: `${STATUS[statusOf(model)].color}22` }}
@@ -53,29 +53,29 @@ export default function SidePanel({
           </div>
           {model.status_detail && <p className="mt-1 text-xs text-slate-400">{model.status_detail}</p>}
           <p className="mt-1 text-xs text-slate-500">
-            Analyse de sécurité Hugging Face :{" "}
+            Hugging Face security scan:{" "}
             {!model.security
-              ? "pas encore lue"
+              ? "not read yet"
               : model.security.issues.length > 0
-                ? <span className="text-violet-300">{model.security.issues.length} fichier(s) signalé(s)</span>
+                ? <span className="text-violet-300">{model.security.issues.length} flagged file(s)</span>
                 : model.security.scanned
-                  ? <span className="text-emerald-400">aucun fichier dangereux</span>
-                  : "analyse en attente chez Hugging Face"}
+                  ? <span className="text-emerald-400">no unsafe files</span>
+                  : "scan pending at Hugging Face"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            LMArena :{" "}
+            LMArena:{" "}
             {model.arena ? (
               <span className="text-slate-300">
-                #{model.arena.rank} au classement général
+                #{model.arena.rank} overall
                 {model.arena.votes ? ` · ${fmt(model.arena.votes)} votes` : ""}
                 {model.arena.date ? ` · ${model.arena.date}` : ""}
               </span>
             ) : (
-              "absent du classement"
+              "not on the leaderboard"
             )}
           </p>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label="Fermer">
+        <button onClick={onClose} className="text-slate-400 hover:text-white" aria-label="Close">
           ✕
         </button>
       </header>
@@ -92,39 +92,39 @@ export default function SidePanel({
           ))}
         {model.usage.download_count_24h != null && (
           <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <div className="text-[11px] text-slate-400">Téléchargements / jour (moy. 30 j)</div>
+            <div className="text-[11px] text-slate-400">Downloads / day (30-day avg.)</div>
             <div className="font-mono">{fmt(model.usage.download_count_24h)}</div>
           </div>
         )}
         {model.usage.active_requests_est != null && (
           <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <div className="text-[11px] text-slate-400">Requêtes actives (est.)</div>
+            <div className="text-[11px] text-slate-400">Active requests (est.)</div>
             <div className="font-mono">{fmt(model.usage.active_requests_est)}</div>
           </div>
         )}
         <p className="col-span-2 text-[11px] leading-snug text-slate-500">
-          Non publiés par nos sources : vitesse, latence, nombre de requêtes, taux d'erreur. L'ELO n'existe que
-          pour les modèles classés sur LMArena.
+          Not published by our sources: speed, latency, request counts, error rates. ELO only exists for
+          models ranked on LMArena.
         </p>
       </section>
 
       <section className="border-t border-slate-800 p-4">
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">
-          Comparer avec
+          Compare with
         </label>
         <select
           className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
           value={targetId ?? ""}
           onChange={(e) => setTargetId(e.target.value || null)}
         >
-          <option value="">— choisir un modèle —</option>
+          <option value="">— pick a model —</option>
           {[...models.values()]
             .filter((m) => m.id !== model.id)
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
-                {m.id === parent?.id ? " (prédécesseur)" : ""}
+                {m.id === parent?.id ? " (predecessor)" : ""}
               </option>
             ))}
         </select>
@@ -133,7 +133,7 @@ export default function SidePanel({
           <>
             <ul className="mt-4 space-y-1.5 text-sm">
               {comparison.deltas.every((d) => d.label === "n/a") && (
-                <li className="text-slate-500">Aucune mesure disponible pour les deux modèles.</li>
+                <li className="text-slate-500">No metric available for both models.</li>
               )}
               {comparison.deltas.filter((d) => d.label !== "n/a").map((d) => (
                 <li key={d.metric} className="flex justify-between gap-2">

@@ -1,4 +1,4 @@
 {
-  "_aide": "Pour signaler une faille : ajoute une ligne dans models, ex. \"org/modele\": {\"status\": \"security_incident\", \"detail\": \"Ce qui a ete trouve\"}. Etats possibles : operational, degraded, down, security_incident, unknown. Supprime la ligne pour retirer l'alerte.",
+  "_help": "To report an incident, add an entry under models, e.g. \"org/model\": {\"status\": \"security_incident\", \"detail\": \"What was found\"}. Statuses: operational, degraded, down, security_incident, unknown. Delete the entry to clear the alert.",
   "models": {}
 }

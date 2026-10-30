@@ -58,16 +58,16 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center px-4 pb-2 pt-3 text-xs">
-        <span className="font-semibold text-slate-300">{open.length} à traiter</span>
+        <span className="font-semibold text-slate-300">{open.length} to review</span>
         {items.length > open.length && (
           <button className="ml-auto text-slate-500 hover:text-slate-300" onClick={() => setShowDone((v) => !v)}>
-            {showDone ? "Masquer les vus" : `Voir les vus (${items.length - open.length})`}
+            {showDone ? "Hide seen" : `Show seen (${items.length - open.length})`}
           </button>
         )}
       </div>
       <ul className="flex-1 space-y-1 overflow-y-auto px-2 pb-3">
         {shown.length === 0 && (
-          <li className="px-2 text-sm text-slate-500">Rien à signaler. Tout fonctionne.</li>
+          <li className="px-2 text-sm text-slate-500">Nothing to report. Everything is running.</li>
         )}
         {shown.map((item) => {
           const isDone = done.has(item.id);
@@ -81,7 +81,7 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
                 checked={isDone}
                 onChange={() => toggle(item.id)}
                 className="mt-1 shrink-0 accent-sky-500"
-                aria-label={`Marquer « ${item.model_name} » comme vu`}
+                aria-label={`Mark "${item.model_name}" as seen`}
               />
               <button className="min-w-0 flex-1 text-left" onClick={() => onSelect(item.model_id)}>
                 <div className="flex items-center gap-1.5 text-xs">

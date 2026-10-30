@@ -41,20 +41,20 @@ function tooltip(n: GNode): string {
   const status = STATUS[n.status];
   const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${status.color};margin-right:6px"></span>`;
   if (n.kind === "engine") {
-    return `<div class="net-tip"><b>Live Analysis Core</b><div class="net-tip-sub">Check-up toutes les ~10 min : Hugging Face + OpenRouter</div></div>`;
+    return `<div class="net-tip"><b>Live Analysis Core</b><div class="net-tip-sub">Check-up every ~10 min: Hugging Face, OpenRouter, LMArena</div></div>`;
   }
   if (n.kind === "provider") {
     return `<div class="net-tip"><b>${escapeHtml(n.name)}</b>
-      <div class="net-tip-sub">${n.modelCount} modèle(s) · ${fmt(n.volume)} téléch./jour</div>
-      <div class="net-tip-sub">${dot}pire état : ${status.label}</div></div>`;
+      <div class="net-tip-sub">${n.modelCount} model(s) · ${fmt(n.volume)} downloads/day</div>
+      <div class="net-tip-sub">${dot}worst status: ${status.label}</div></div>`;
   }
   const m = n.model!;
   const extras = [
     m.metrics.elo_score != null ? `ELO ${fmt(m.metrics.elo_score)}` : null,
-    m.metrics.availability_pct != null ? `dispo ${fmt(m.metrics.availability_pct)} %` : null,
+    m.metrics.availability_pct != null ? `availability ${fmt(m.metrics.availability_pct)}%` : null,
   ].filter(Boolean);
   return `<div class="net-tip"><b>${escapeHtml(m.name)}</b>
-    <div class="net-tip-sub">${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} téléch./jour</div>
+    <div class="net-tip-sub">${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} downloads/day</div>
     <div class="net-tip-sub">${dot}${status.label}${extras.length ? " · " + extras.join(" · ") : ""}</div></div>`;
 }
 
