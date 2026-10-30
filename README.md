@@ -48,13 +48,16 @@ live-model-map/
 - **Models** orbit their provider, colored by status; violet links = real lineage (`base_model`).
 - **Volume**: radius ∝ cube root of downloads/day (so the sphere's volume is proportional to the
   real volume), clamped to a min and max, with animated size changes.
-- **Flow**: particles travel from each provider into the core; their count (1 to 4) follows the
-  download volume, their color the status. No traffic between models is made up.
+- **Flow**: each provider is linked to the core by a tube carrying a continuous gradient that
+  streams into the center; its thickness and speed follow the download volume, its color the
+  provider's worst status. No traffic between models is made up.
+- **Style**: flat camera-facing badges (no shading or reflections), a thin status ring around each
+  provider logo, Inter for all text, muted status colors on a graphite background.
 - Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
   rotate / zoom / pan, hover tooltips, click (details panel + camera fly-to), "Reset view".
 - Performance: shared geometries, materials and textures disposed on unmount, a single animation
   loop, capped pixel ratio, rendering paused while the tab is hidden. With the OS "reduce motion"
-  setting there is no float, pulse or particles.
+  setting the float, pulses and streams stand still.
 - Without WebGL a notice explains it; the lists and the details panel still work.
 
 ### Statuses (node color)

@@ -185,7 +185,7 @@ export default function App() {
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
-                Volume ∝ downloads/day (radius ∝ cube root). Particles: flow into the core, scaled by that volume.
+                Volume ∝ downloads/day (radius ∝ cube root). Streams into the core: thickness and speed follow that volume.
               </div>
             </div>
             {webgl && (

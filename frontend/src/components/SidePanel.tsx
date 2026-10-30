@@ -35,7 +35,7 @@ export default function SidePanel({
       <header className="flex items-start gap-3 border-b border-slate-800 p-4">
         <span
           className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
-          style={{ background: providerColor(model.provider) }}
+          style={{ background: STATUS[statusOf(model)].color }}
         />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-lg font-semibold">{model.name}</h2>

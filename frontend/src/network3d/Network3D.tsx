@@ -2,16 +2,19 @@ import { forceCollide } from "d3-force-3d";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { fmt, STATUS } from "../format";
 import type { AIModel, Providers } from "../types";
-import { buildGraph, structureKey, type GLink, type GNode } from "./graphData";
+import { buildGraph, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
   animateNode,
   createEngine,
+  createFlowLink,
   createModel,
   createProvider,
   disposeNode,
+  FLOW_OPACITY,
+  FLOW_OPACITY_LIT,
+  placeFlowLink,
   ResourcePool,
   setStatus,
   type NodeAnim,
@@ -77,6 +80,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const pool = useMemo(() => new ResourcePool(), []);
   const cache = useRef(new Map<string, GNode>()).current;
   const objects = useRef(new Map<string, THREE.Group>()).current;
+  const flows = useRef(new Map<string, { mesh: THREE.Mesh; link: GLink }>()).current;
   const fitted = useRef(false);
   const motion = !reducedMotion;
 
@@ -99,7 +103,11 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       anim.radius = n.radius;
       setStatus(pool, anim, n.status);
     }
-  }, [models, providers, cache, objects, pool]);
+    for (const { mesh, link } of flows.values()) {
+      const status = cache.get(endId(link.source))?.status ?? "unknown";
+      ((mesh.material as THREE.ShaderMaterial).uniforms.uColor.value as THREE.Color).set(STATUS[status].color);
+    }
+  }, [models, providers, cache, objects, flows, pool]);
 
   // A metrics/status update makes the node pulse once.
   useEffect(() => {
@@ -162,29 +170,10 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     const renderer = fg.renderer() as THREE.WebGLRenderer;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
+    // Flat badges need no lights or post-processing; light fog adds depth.
     const scene = fg.scene();
-    // Set on the scene (not only the clear color) so it goes through color
-    // management with the bloom composer and stays deep navy.
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.FogExp2(BACKGROUND, 0.0011);
-    const rim = new THREE.PointLight(new THREE.Color("#cfd8e3"), 1.2, 0, 0);
-    const fill = new THREE.DirectionalLight(new THREE.Color("#8b95a7"), 0.5);
-    fill.position.set(-300, 200, -200);
-    scene.add(rim, fill);
-
-    const composer = fg.postProcessingComposer();
-    // Soft bloom: only bright cores and particles glow, the background stays dark.
-    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.16, 0.3, 0.75);
-    composer.addPass(bloom);
-
-    return () => {
-      scene.remove(rim, fill);
-      rim.dispose();
-      fill.dispose();
-      composer.removePass(bloom);
-      bloom.dispose();
-    };
-    // Size changes only matter for the first setup; the composer tracks resizes itself.
+    scene.fog = new THREE.FogExp2(BACKGROUND, 0.0008);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.width > 0 && fontReady]);
 
@@ -196,6 +185,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       const t = now / 1000;
+      if (motion) pool.time.value = t;
       for (const group of objects.values()) {
         animateNode(group.userData.anim as NodeAnim, t, dt, motion);
       }
@@ -203,7 +193,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [objects, motion]);
+  }, [objects, motion, pool]);
 
   // Free GPU resources when the view goes away. Deferred so React's StrictMode
   // mount → unmount → mount check (dev) doesn't dispose a pool still in use.
@@ -214,10 +204,11 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       disposeTimer.current = window.setTimeout(() => {
         objects.forEach(disposeNode);
         objects.clear();
+        flows.clear();
         pool.dispose();
       }, 0);
     };
-  }, [objects, pool]);
+  }, [objects, flows, pool]);
 
   // Pause rendering while the tab is hidden.
   useEffect(() => {
@@ -298,7 +289,6 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   // Link ends are ids until the simulation swaps in the node objects.
   const end = useCallback((x: string | GNode) => (typeof x === "object" ? x : cache.get(x)), [cache]);
   const endId = (x: string | GNode) => (typeof x === "object" ? x.id : x);
-  const linkStatusColor = useCallback((l: GLink) => STATUS[end(l.source)?.status ?? "unknown"].color, [end]);
 
   const isLit = useCallback(
     (l: GLink) => {
@@ -307,6 +297,40 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       return (hovered && ids.includes(hovered.id)) || (selectedId !== null && ids.includes(selectedId));
     },
     [hovered, selectedId],
+  );
+
+  // Hovered or selected links get brighter (a uniform change, no rebuild).
+  useEffect(() => {
+    for (const { mesh, link } of flows.values()) {
+      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = isLit(link) ? FLOW_OPACITY_LIT : FLOW_OPACITY;
+    }
+  }, [isLit, flows]);
+
+  // Provider → core links are thick tubes with a continuous flow; the others stay thin lines.
+  // Must keep a stable identity: a new function makes the graph rebuild every link.
+  const makeLink = useCallback(
+    (l: GLink) => {
+      if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
+      const status = end(l.source)?.status ?? "unknown";
+      const mesh = createFlowLink(pool, STATUS[status].color, 0.45 + 0.3 * l.particles, 0.12 + 0.07 * l.particles);
+      const old = flows.get(l.id);
+      if (old) (old.mesh.userData.dispose as () => void)();
+      flows.set(l.id, { mesh, link: l });
+      return mesh;
+    },
+    [pool, flows, end],
+  );
+
+  const positionLink = useCallback(
+    // The library types the link loosely here; it's one of our GLinks.
+    (obj: THREE.Object3D, coords: { start: THREE.Vector3Like; end: THREE.Vector3Like }, link: object) => {
+      const l = link as GLink;
+      if (l.kind !== "monitor") return false;
+      const sourceRadius = end(l.source)?.radius ?? 10;
+      placeFlowLink(obj as THREE.Mesh, coords.start, coords.end, sourceRadius * 1.2, ENGINE_RADIUS * 1.1);
+      return true;
+    },
+    [end],
   );
 
   return (
@@ -339,22 +363,11 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           }}
           linkSource="source"
           linkTarget="target"
-          linkColor={(l) =>
-            isLit(l)
-              ? "#cbd5e1"
-              : l.kind === "monitor"
-                ? linkStatusColor(l)
-                : l.kind === "lineage"
-                  ? "#6f7396"
-                  : "#262c36"
-          }
-          linkOpacity={0.22}
-          linkWidth={(l) => (l.kind === "monitor" ? (isLit(l) ? 0.6 : 0.3) : 0)}
-          linkDirectionalParticles={(l) => (motion && l.kind === "monitor" ? l.particles : 0)}
-          linkDirectionalParticleSpeed={0.0025}
-          linkDirectionalParticleWidth={1}
-          linkDirectionalParticleColor={linkStatusColor}
-          linkDirectionalParticleResolution={6}
+          linkThreeObject={makeLink}
+          linkPositionUpdate={positionLink}
+          linkColor={(l) => (isLit(l) ? "#aab4c2" : l.kind === "lineage" ? "#5d6185" : "#2a303a")}
+          linkOpacity={0.35}
+          linkWidth={0}
           d3AlphaDecay={0.025}
           d3VelocityDecay={0.38}
           warmupTicks={60}
