@@ -5,7 +5,7 @@ const KIND_COLOR: Record<TodoKind, string> = {
   security_incident: STATUS.security_incident.color,
   down: STATUS.down.color,
   degraded: STATUS.degraded.color,
-  new_model: "#8ea4c4",
+  new_model: "#9ec5ff",
 };
 
 /** What needs attention right now; items leave the list once the model is back to normal. */

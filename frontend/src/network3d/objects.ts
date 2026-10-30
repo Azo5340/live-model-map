@@ -91,7 +91,7 @@ const FLOW_FRAGMENT = /* glsl */ `
     float tail = behind >= 0.0 ? exp(-behind * 9.0) : 0.0;
     float spark = exp(-abs(behind) * 60.0);
     float ends = smoothstep(0.0, 0.04, vUv.y) * smoothstep(0.0, 0.04, 1.0 - vUv.y);
-    float light = 0.16 + 0.9 * tail + 0.9 * spark;
+    float light = 0.1 + 0.85 * tail + 1.1 * spark;
     vec3 color = mix(uColor, vec3(1.0), 0.55 * spark + 0.2 * tail);
     gl_FragColor = vec4(color * light, uOpacity * ends);
   }
@@ -160,6 +160,49 @@ export class ResourcePool {
     m.dispose();
   }
 
+  /** A luminous orb: white-hot center fading through the color to transparent (additive). */
+  orb(color: string): THREE.SpriteMaterial {
+    return this.material(`orb:${color}`, () =>
+      glowMaterial(
+        this.texture(`orb:${color}`, (ctx) => {
+          const c = new THREE.Color(color);
+          const rgb = (a: number) => `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`;
+          const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2);
+          g.addColorStop(0, "rgba(255,255,255,1)");
+          g.addColorStop(0.18, "rgba(255,255,255,0.95)");
+          g.addColorStop(0.32, rgb(0.95));
+          g.addColorStop(0.55, rgb(0.45));
+          g.addColorStop(1, rgb(0));
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, TEX, TEX);
+        }),
+        "#ffffff",
+        1,
+      ),
+    );
+  }
+
+  /** Thin light rays radiating from the center, for the core's starburst. */
+  starburst(): THREE.CanvasTexture {
+    return this.texture("starburst", (ctx) => {
+      ctx.translate(TEX / 2, TEX / 2);
+      for (let i = 0; i < 28; i++) {
+        const long = i % 2 === 0;
+        const len = (TEX / 2) * (long ? 0.98 : 0.62);
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, "rgba(255,255,255,0.9)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.strokeStyle = g;
+        ctx.lineWidth = long ? 2.2 : 1.4;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(len, 0);
+        ctx.stroke();
+        ctx.rotate((Math.PI * 2) / 28);
+      }
+    });
+  }
+
   /** Solid disc with a hairline darker edge. */
   disc(color: string): THREE.SpriteMaterial {
     return this.material(`disc:${color}`, () =>
@@ -188,6 +231,11 @@ export class ResourcePool {
       ctx.strokeStyle = color;
       ctx.stroke();
     });
+  }
+
+  /** A glowing status ring (additive) around provider logos. */
+  glowRing(color: string): THREE.SpriteMaterial {
+    return this.material(`glowring:${color}`, () => glowMaterial(this.ringTexture("#ffffff", 12), color, 0.95));
   }
 
   ring(color: string, width: number, opacity = 1): THREE.SpriteMaterial {
@@ -296,7 +344,8 @@ export class ResourcePool {
   }
 }
 
-export const STREAM_OPACITY = 0.75;
+export const STREAM_OPACITY = 0.5;
+const BASE_GLOW = { provider: 0.2, model: 0.16 };
 export const STREAM_OPACITY_LIT = 1;
 
 const color = (s: ModelStatus) => STATUS[s].color;
@@ -335,20 +384,24 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   const body = new THREE.Group();
   group.add(body);
 
-  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#7cc4ff", 0.55)));
-  halo.scale.setScalar(5.5);
-  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#c8ecff", 0.7)));
-  aura.scale.setScalar(2.6);
-  const disc = new THREE.Sprite(pool.disc("#16202c"));
-  disc.scale.setScalar(2);
-  const edge = new THREE.Sprite(pool.ring("#9fd2f2", 8, 0.9));
-  edge.scale.setScalar(2);
+  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#4f8dff", 0.6)));
+  halo.scale.setScalar(9);
+  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#8f6bff", 0.18)));
+  nebula.scale.setScalar(14);
+  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#bfe3ff", 0.9)));
+  aura.scale.setScalar(3.6);
+  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#d6ecff", 0.55)));
+  rays.scale.setScalar(8);
+  const rays2 = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#a9b8ff", 0.3)));
+  rays2.scale.setScalar(5.5);
   const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#ffffff", 1)));
-  heart.scale.setScalar(1.3);
-  const inner = new THREE.Sprite(pool.ring("#cfeaff", 5, 0.7));
-  inner.scale.setScalar(1.1);
-  const label = pool.label("LIVE ANALYSIS CORE", 0.14, "#b8c4d2");
-  label.position.y = -1.85;
+  heart.scale.setScalar(2);
+  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 5), "#9fd2ff", 0.5)));
+  edge.scale.setScalar(2.4);
+  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 4), "#d9efff", 0.6)));
+  inner.scale.setScalar(1.3);
+  const label = pool.label("LIVE ANALYSIS CORE", 0.12, "#c9d8f2");
+  label.position.y = -2.4;
 
   // Ripples spread out from the core when pulses arrive.
   const ripples = Array.from({ length: 5 }, () => {
@@ -358,9 +411,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     return r;
   });
 
-  halo.renderOrder = -1;
-  edge.renderOrder = inner.renderOrder = heart.renderOrder = 2;
-  body.add(halo, aura, disc, edge, inner, heart, label, ...ripples);
+  body.add(nebula, halo, rays, rays2, aura, edge, inner, heart, label, ...ripples);
 
   const anim = baseAnim("engine", node, body);
   let energy = 0.3;
@@ -379,11 +430,17 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     energy = Math.max(0.25, energy * Math.exp(-0.9 * dt));
     sinceRipple += dt;
     const breathe = motion ? Math.sin(t * 1.4) : 0;
-    (halo.material as THREE.SpriteMaterial).opacity = 0.35 + 0.35 * energy + 0.05 * breathe;
-    (aura.material as THREE.SpriteMaterial).opacity = 0.45 + 0.4 * energy;
-    heart.scale.setScalar(1.2 + 0.35 * energy + 0.06 * breathe);
-    halo.scale.setScalar(5.2 + 1.2 * energy + 0.2 * breathe);
-    inner.scale.setScalar(1.1 + 0.08 * breathe);
+    (halo.material as THREE.SpriteMaterial).opacity = 0.3 + 0.25 * energy + 0.04 * breathe;
+    (aura.material as THREE.SpriteMaterial).opacity = 0.4 + 0.3 * energy;
+    (rays.material as THREE.SpriteMaterial).opacity = 0.25 + 0.3 * energy;
+    heart.scale.setScalar(1.4 + 0.45 * energy + 0.06 * breathe);
+    halo.scale.setScalar(7 + 1.5 * energy + 0.3 * breathe);
+    rays.scale.setScalar(6.5 + 2 * energy);
+    if (motion) {
+      (rays.material as THREE.SpriteMaterial).rotation = t * 0.05;
+      (rays2.material as THREE.SpriteMaterial).rotation = -t * 0.08;
+    }
+    inner.scale.setScalar(1.3 + 0.1 * breathe);
     for (const r of ripples) {
       if (!r.visible) continue;
       r.userData.age += dt / 1.6;
@@ -392,8 +449,8 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
         r.visible = false;
         continue;
       }
-      r.scale.setScalar(2 + 4 * age);
-      (r.material as THREE.SpriteMaterial).opacity = 0.55 * (1 - age) * (1 - age);
+      r.scale.setScalar(2.4 + 6 * age);
+      (r.material as THREE.SpriteMaterial).opacity = 0.6 * (1 - age) * (1 - age);
     }
   };
   group.userData.anim = anim;
@@ -405,18 +462,17 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   const body = new THREE.Group();
   group.add(body);
 
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), 0.12));
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.provider));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3.4);
-  glow.renderOrder = -1;
+  glow.scale.setScalar(3.6);
   const logoMaterial = pool.own(spriteMaterial(pool.logo(node.name, node.avatar), 1, true));
+  logoMaterial.color.set("#9aa7c9"); // dimmed below the bloom threshold so logos stay readable
   const logo = new THREE.Sprite(logoMaterial);
   logo.scale.setScalar(2);
-  const ring = new THREE.Sprite(pool.ring(color(node.status), 10));
-  ring.scale.setScalar(2.3);
-  ring.renderOrder = 1;
-  const label = pool.label(node.name, 0.3);
-  label.position.y = -1.6;
+  const ring = new THREE.Sprite(pool.glowRing(color(node.status)));
+  ring.scale.setScalar(2.35);
+  const label = pool.label(node.name, 0.3, "#c3cee6");
+  label.position.y = -1.7;
   body.add(glow, logo, ring, label);
 
   const anim = baseAnim("provider", node, body);
@@ -438,12 +494,11 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), 0.1));
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.model));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3.2);
-  glow.renderOrder = -1;
-  const disc = new THREE.Sprite(pool.disc(color(node.status)));
-  disc.scale.setScalar(2);
+  glow.scale.setScalar(3.6);
+  const disc = new THREE.Sprite(pool.orb(color(node.status)));
+  disc.scale.setScalar(2.4);
   body.add(glow, disc);
   const anim = baseAnim("model", node, body);
   anim.disc = disc;
@@ -461,8 +516,8 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
 export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatus) {
   if (anim.status === status) return;
   anim.status = status;
-  if (anim.disc) anim.disc.material = pool.disc(color(status));
-  if (anim.ring) anim.ring.material = pool.ring(color(status), 10);
+  if (anim.disc) anim.disc.material = pool.orb(color(status));
+  if (anim.ring) anim.ring.material = pool.glowRing(color(status));
   if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(color(status));
   if (status === "security_incident" && !anim.alert) {
     anim.alert = alertRing(pool);
@@ -506,7 +561,8 @@ export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boole
   anim.body.scale.set(size * sx, size * sy, size);
 
   if (anim.glow) {
-    (anim.glow.material as THREE.SpriteMaterial).opacity = (anim.kind === "provider" ? 0.12 : 0.1) + 0.55 * flash;
+    (anim.glow.material as THREE.SpriteMaterial).opacity =
+      (anim.kind === "provider" ? BASE_GLOW.provider : BASE_GLOW.model) + 0.6 * flash;
   }
   if (anim.alert) anim.alert.scale.setScalar(motion ? 2.6 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.5)) : 2.8);
   anim.animate?.(t, dt, motion);

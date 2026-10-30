@@ -7,7 +7,7 @@
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  background: #0b0d12;
+  background: #02030a;
   font-family: var(--font-sans);
   font-feature-settings: "cv11", "ss01"; /* Inter's single-storey a and open digits */
   -webkit-font-smoothing: antialiased;
@@ -26,7 +26,7 @@ body {
   padding: 0 !important;
 }
 .net-tip {
-  background: rgba(13, 16, 21, 0.94);
+  background: rgba(7, 10, 24, 0.92);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
   padding: 8px 10px;

@@ -51,12 +51,13 @@ live-model-map/
 - **Light pulses**: every provider *and* every model is linked to the core by a stream on which
   comet-like pulses of light travel into the center. Pulse rate and stream width follow the real
   download volume (log scale), the color follows the status. No traffic between models is made up.
-- **Fluid nodes**: nodes are flat badges (no shading or reflections) that breathe gently and
-  wobble like a drop each time they send a pulse, with a brief glow.
-- **Bright core**: the core gains energy and sends out ripples as pulses arrive, so it shines
-  more when there is more activity.
-- **Style**: a thin status ring around each provider logo, Inter for all text, muted status
-  colors on a graphite background.
+- **Fluid nodes**: models are luminous orbs and providers show their logo inside a glowing status
+  ring; nodes breathe gently and wobble like a drop each time they send a pulse.
+- **Bright core**: a white starburst core that gains energy and sends out ripples as pulses
+  arrive, so it shines more when there is more activity.
+- **Style**: deep-space background with a star field and glowing dust around the core, thin
+  luminous filaments, selective bloom (only the brightest points glow, logos stay readable),
+  a blue/violet palette where degraded, down and security incidents stand out, Inter for text.
 - Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
   rotate / zoom / pan, hover tooltips, click (details panel + camera fly-to), "Reset view".
 - Performance: shared geometries, materials and textures disposed on unmount, a single animation
@@ -68,11 +69,11 @@ live-model-map/
 
 | Status | Color | Source |
 |---|---|---|
-| Operational | green | best OpenRouter provider ≥ 95% available over 30 min |
+| Operational | blue | best OpenRouter provider ≥ 95% available over 30 min |
 | Degraded | amber | between 0 and 95% |
-| Down | red | 0%, or no provider left |
-| Security incident | violet, pulsing | automatic (Hugging Face scan) or reported by hand |
-| Unknown | grey | model not served on OpenRouter |
+| Down | rose red | 0%, or no provider left |
+| Security incident | magenta, pulsing | automatic (Hugging Face scan) or reported by hand |
+| Unknown | soft violet | model not served on OpenRouter |
 
 ### Sidebar and details panel
 

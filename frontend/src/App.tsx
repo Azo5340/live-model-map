@@ -95,7 +95,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-white/5 bg-[#0b0d12] px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-white/5 bg-[#04060f] px-4 py-2.5">
         <button
           className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 sm:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -131,7 +131,7 @@ export default function App() {
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#0d1015] sm:static sm:flex sm:w-56 lg:w-72`}
+          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#070a17] sm:static sm:flex sm:w-56 lg:w-72`}
         >
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
@@ -176,7 +176,7 @@ export default function App() {
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-            <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#0d1015]/90 px-3 py-2 text-xs sm:block">
+            <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#070a17]/90 px-3 py-2 text-xs sm:block">
               {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color }} />
@@ -191,7 +191,7 @@ export default function App() {
             {webgl && (
               <button
                 onClick={() => network.current?.resetCamera()}
-                className="pointer-events-auto rounded-lg border border-white/5 bg-[#0d1015]/90 px-3 py-1.5 text-xs text-slate-300 hover:border-white/15 hover:text-slate-100"
+                className="pointer-events-auto rounded-lg border border-white/5 bg-[#070a17]/90 px-3 py-1.5 text-xs text-slate-300 hover:border-white/15 hover:text-slate-100"
               >
                 Reset view
               </button>

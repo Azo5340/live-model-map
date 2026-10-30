@@ -40,8 +40,8 @@ export const ENGINE_RADIUS = 24;
 // Radius grows with the cube root of volume (so the sphere's *volume* is
 // proportional to downloads), clamped so small nodes stay visible.
 const SIZES: Record<"provider" | "model", { min: number; max: number }> = {
-  provider: { min: 9, max: 26 },
-  model: { min: 2.2, max: 8 },
+  provider: { min: 11, max: 30 },
+  model: { min: 3.6, max: 11 },
 };
 
 export function radiusFor(kind: "provider" | "model", volume: number, maxVolume: number): number {

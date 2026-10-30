@@ -2,6 +2,7 @@ import { forceCollide } from "d3-force-3d";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { fmt, STATUS } from "../format";
 import type { AIModel, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
@@ -21,6 +22,7 @@ import {
   setStatus,
   type NodeAnim,
 } from "./objects";
+import { createSpace } from "./space";
 
 export interface Network3DHandle {
   resetCamera: () => void;
@@ -35,7 +37,7 @@ interface Props {
   reducedMotion: boolean;
 }
 
-const BACKGROUND = "#0b0d12";
+const BACKGROUND = "#02030a";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
 const MIN_FIT_EXTENT = 250;
 
@@ -84,6 +86,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const objects = useRef(new Map<string, THREE.Group>()).current;
   const flows = useRef(new Map<string, { mesh: THREE.Mesh; link: GLink; head: number }>()).current;
   const fitted = useRef(false);
+  const spaceRef = useRef<ReturnType<typeof createSpace> | null>(null);
   const motion = !reducedMotion;
 
   // Rebuild the graph only when nodes/links appear or disappear; node objects
@@ -177,10 +180,25 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     const renderer = fg.renderer() as THREE.WebGLRenderer;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 
-    // Flat badges need no lights or post-processing; light fog adds depth.
+    // Deep-space background, star field and core dust, plus bloom so every light glows.
     const scene = fg.scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.FogExp2(BACKGROUND, 0.0008);
+    scene.fog = new THREE.FogExp2(BACKGROUND, 0.0006);
+    const space = createSpace();
+    spaceRef.current = space;
+    scene.add(space.group);
+
+    const composer = fg.postProcessingComposer();
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 1.1, 0.6, 0.6);
+    composer.addPass(bloom);
+
+    return () => {
+      scene.remove(space.group);
+      space.dispose();
+      spaceRef.current = null;
+      composer.removePass(bloom);
+      bloom.dispose();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.width > 0 && fontReady]);
 
@@ -194,6 +212,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const t = now / 1000;
       if (motion) {
         pool.time.value = t;
+        spaceRef.current?.update(t);
         // A pulse leaves its node when the head wraps around; that same instant the
         // previous one reaches the core. The node wobbles, the core gains energy.
         const core = objects.get(ENGINE_ID)?.userData.receive as ((n: number) => void) | undefined;
@@ -336,7 +355,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
       const status = end(l.source)?.status ?? "unknown";
       const provider = end(l.source)?.kind === "provider";
-      const width = provider ? 0.5 + 1.1 * l.activity : 0.15 + 0.35 * l.activity;
+      const width = provider ? 0.4 + 0.8 * l.activity : 0.12 + 0.28 * l.activity;
       const rate = provider ? 0.18 + 0.32 * l.activity : 0.08 + 0.22 * l.activity; // pulses per second
       const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random());
       const old = flows.get(l.id);
@@ -391,8 +410,8 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           linkTarget="target"
           linkThreeObject={makeLink}
           linkPositionUpdate={positionLink}
-          linkColor={(l) => (isLit(l) ? "#aab4c2" : l.kind === "lineage" ? "#5d6185" : "#2a303a")}
-          linkOpacity={0.35}
+          linkColor={(l) => (isLit(l) ? "#e4eeff" : l.kind === "lineage" ? "#b08cff" : "#4c7dff")}
+          linkOpacity={0.3}
           linkWidth={0}
           d3AlphaDecay={0.025}
           d3VelocityDecay={0.38}

@@ -31,7 +31,7 @@ export default function SidePanel({
   const comparison = useMemo(() => (target ? compare(model, target) : null), [model, target]);
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-[#0d1015] md:w-[380px]">
+    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-[#070a17] md:w-[380px]">
       <header className="flex items-start gap-3 border-b border-slate-800 p-4">
         <span
           className="mt-1.5 h-3 w-3 shrink-0 rounded-full"
