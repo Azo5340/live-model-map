@@ -70,8 +70,8 @@ live-model-map/
 ### Sidebar and details panel
 
 - **To review**: security incidents, down and degraded models, and new models (last 3 days).
-  "Seen" ticks are remembered in your browser. Items leave the list on their own once the model
-  is back to normal.
+  Clicking an item flies to the model; items leave the list on their own once the model is back
+  to normal.
 - **Feed**: every new model and every status or price change.
 - **Check-ups**: the history of check-up passes (duration, new models, errors).
 - Clicking a model shows its details (only the metrics our sources provide) and compares it with
