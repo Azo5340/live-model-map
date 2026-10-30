@@ -30,8 +30,8 @@ export interface GLink {
   kind: LinkKind;
   source: string | GNode;
   target: string | GNode;
-  /** Particles flowing toward the engine (monitor links only). */
-  particles: number;
+  /** Real activity of the source, 0 to 1 on a log scale of downloads (monitor links only). */
+  activity: number;
 }
 
 export const ENGINE_ID = "__engine__";
@@ -58,10 +58,10 @@ function worst(statuses: ModelStatus[]): ModelStatus {
   return "unknown";
 }
 
-/** Particles per monitor link from real download volume: 1 to 4, log scale. */
-function particlesFor(volume: number, maxVolume: number): number {
-  if (volume <= 0 || maxVolume <= 0) return 1;
-  return 1 + Math.round(3 * (Math.log10(1 + volume) / Math.log10(1 + maxVolume)));
+/** Activity from real download volume: 0 to 1, log scale. Drives pulse rate and stream width. */
+function activityFor(volume: number, maxVolume: number): number {
+  if (volume <= 0 || maxVolume <= 0) return 0;
+  return Math.log10(1 + volume) / Math.log10(1 + maxVolume);
 }
 
 /** Changes only when nodes or links appear/disappear: drives full graph rebuilds. */
@@ -133,7 +133,7 @@ export function buildGraph(
       kind: "monitor",
       source: pid,
       target: ENGINE_ID,
-      particles: particlesFor(volume, maxProviderVolume),
+      activity: activityFor(volume, maxProviderVolume),
     });
 
     for (const m of ms) {
@@ -150,7 +150,15 @@ export function buildGraph(
           radius: radiusFor("model", volumeM, maxModelVolume),
         }),
       );
-      links.push({ id: `${pid}->${m.id}`, kind: "member", source: pid, target: m.id, particles: 0 });
+      links.push({ id: `${pid}->${m.id}`, kind: "member", source: pid, target: m.id, activity: 0 });
+      // Every model is checked by the core too: it gets its own stream.
+      links.push({
+        id: `${m.id}->engine`,
+        kind: "monitor",
+        source: m.id,
+        target: ENGINE_ID,
+        activity: activityFor(volumeM, maxModelVolume),
+      });
     }
   }
 
@@ -161,7 +169,7 @@ export function buildGraph(
         kind: "lineage",
         source: m.parent_model_id,
         target: m.id,
-        particles: 0,
+        activity: 0,
       });
     }
   }

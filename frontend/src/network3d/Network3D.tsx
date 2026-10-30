@@ -4,18 +4,20 @@ import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { fmt, STATUS } from "../format";
 import type { AIModel, Providers } from "../types";
-import { buildGraph, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
+import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
   animateNode,
   createEngine,
-  createFlowLink,
   createModel,
   createProvider,
+  createStream,
   disposeNode,
-  FLOW_OPACITY,
-  FLOW_OPACITY_LIT,
-  placeFlowLink,
+  kick,
+  placeStream,
+  pulseHead,
   ResourcePool,
+  STREAM_OPACITY,
+  STREAM_OPACITY_LIT,
   setStatus,
   type NodeAnim,
 } from "./objects";
@@ -80,7 +82,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const pool = useMemo(() => new ResourcePool(), []);
   const cache = useRef(new Map<string, GNode>()).current;
   const objects = useRef(new Map<string, THREE.Group>()).current;
-  const flows = useRef(new Map<string, { mesh: THREE.Mesh; link: GLink }>()).current;
+  const flows = useRef(new Map<string, { mesh: THREE.Mesh; link: GLink; head: number }>()).current;
   const fitted = useRef(false);
   const motion = !reducedMotion;
 
@@ -157,11 +159,16 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       ?.distance((l) => {
         const source = cache.get(endId(l.source));
         const target = cache.get(endId(l.target));
-        if (l.kind === "monitor") return 95 + (source?.radius ?? 10) * 2.5;
+        if (l.kind === "monitor") return source?.kind === "model" ? 170 : 95 + (source?.radius ?? 10) * 2.5;
         if (l.kind === "member") return (source?.radius ?? 10) * 1.6 + (target?.radius ?? 2) * 2 + 6;
         return 18;
       })
-      .strength((l) => (l.kind === "monitor" ? 0.5 : l.kind === "member" ? 0.9 : 0.02));
+      .strength((l) => {
+        if (l.kind === "member") return 0.9;
+        if (l.kind === "lineage") return 0.02;
+        // Model streams barely pull, so models stay grouped around their provider.
+        return cache.get(endId(l.source))?.kind === "model" ? 0.02 : 0.5;
+      });
     fg.d3Force(
       "collide",
       forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 2.2 : 1.6) + 2).iterations(2) as never,
@@ -185,7 +192,22 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
       const t = now / 1000;
-      if (motion) pool.time.value = t;
+      if (motion) {
+        pool.time.value = t;
+        // A pulse leaves its node when the head wraps around; that same instant the
+        // previous one reaches the core. The node wobbles, the core gains energy.
+        const core = objects.get(ENGINE_ID)?.userData.receive as ((n: number) => void) | undefined;
+        for (const flow of flows.values()) {
+          const head = pulseHead(t, flow.mesh.userData.rate, flow.mesh.userData.phase);
+          if (head < flow.head) {
+            const source = objects.get(endId(flow.link.source))?.userData.anim as NodeAnim | undefined;
+            const fromProvider = source?.kind === "provider";
+            if (source) kick(source, fromProvider ? 0.9 : 0.7);
+            core?.(fromProvider ? 0.08 : 0.025);
+          }
+          flow.head = head;
+        }
+      }
       for (const group of objects.values()) {
         animateNode(group.userData.anim as NodeAnim, t, dt, motion);
       }
@@ -193,7 +215,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [objects, motion, pool]);
+  }, [objects, flows, motion, pool]);
 
   // Free GPU resources when the view goes away. Deferred so React's StrictMode
   // mount → unmount → mount check (dev) doesn't dispose a pool still in use.
@@ -302,20 +324,24 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   // Hovered or selected links get brighter (a uniform change, no rebuild).
   useEffect(() => {
     for (const { mesh, link } of flows.values()) {
-      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = isLit(link) ? FLOW_OPACITY_LIT : FLOW_OPACITY;
+      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = isLit(link) ? STREAM_OPACITY_LIT : STREAM_OPACITY;
     }
   }, [isLit, flows]);
 
-  // Provider → core links are thick tubes with a continuous flow; the others stay thin lines.
+  // Every node → core link is a stream of light pulses (thicker and faster for busier
+  // nodes, providers more than models); the other links stay thin lines.
   // Must keep a stable identity: a new function makes the graph rebuild every link.
   const makeLink = useCallback(
     (l: GLink) => {
       if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
       const status = end(l.source)?.status ?? "unknown";
-      const mesh = createFlowLink(pool, STATUS[status].color, 0.45 + 0.3 * l.particles, 0.12 + 0.07 * l.particles);
+      const provider = end(l.source)?.kind === "provider";
+      const width = provider ? 0.5 + 1.1 * l.activity : 0.15 + 0.35 * l.activity;
+      const rate = provider ? 0.18 + 0.32 * l.activity : 0.08 + 0.22 * l.activity; // pulses per second
+      const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random());
       const old = flows.get(l.id);
       if (old) (old.mesh.userData.dispose as () => void)();
-      flows.set(l.id, { mesh, link: l });
+      flows.set(l.id, { mesh, link: l, head: 0 });
       return mesh;
     },
     [pool, flows, end],
@@ -327,7 +353,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const l = link as GLink;
       if (l.kind !== "monitor") return false;
       const sourceRadius = end(l.source)?.radius ?? 10;
-      placeFlowLink(obj as THREE.Mesh, coords.start, coords.end, sourceRadius * 1.2, ENGINE_RADIUS * 1.1);
+      placeStream(obj as THREE.Mesh, coords.start, coords.end, sourceRadius * 1.2, ENGINE_RADIUS * 1.1);
       return true;
     },
     [end],

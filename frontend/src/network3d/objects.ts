@@ -5,13 +5,16 @@ import type { ModelStatus } from "../types";
 import type { GNode } from "./graphData";
 
 /**
- * Three.js objects for the 3D network: flat, camera-facing badges (no shading,
- * no reflections) and thick provider → core links with a continuous flowing
- * gradient.
+ * Three.js objects for the 3D network.
  *
- * Every node is a Group whose `body` child holds the visuals: the force
- * simulation moves the Group, the animation loop scales and floats the body.
- * Textures and materials are shared through a ResourcePool and disposed
+ * Nodes are flat camera-facing badges (no shading or reflections) that behave
+ * like drops of fluid: they breathe gently and wobble each time they send a
+ * light pulse. Every node is linked to a bright core by a stream on which comet
+ * pulses travel; the core gains energy and ripples as pulses arrive.
+ *
+ * Each node is a Group whose `body` child holds the visuals: the force
+ * simulation moves the Group, the animation loop scales, wobbles and floats the
+ * body. Textures and materials are shared through a ResourcePool and disposed
  * together when the view unmounts.
  */
 
@@ -27,10 +30,14 @@ export interface NodeAnim {
   /** Short pulse after a metrics/status update, in seconds remaining. */
   pulse: number;
   status: ModelStatus;
+  /** Fluid wobble: strength (decays) and time since the last kick. */
+  wobble: number;
+  wobbleAge: number;
   disc?: THREE.Sprite;
   ring?: THREE.Sprite;
+  glow?: THREE.Sprite;
   alert?: THREE.Sprite;
-  animate?: (t: number, motion: boolean) => void;
+  animate?: (t: number, dt: number, motion: boolean) => void;
 }
 
 const TEX = 256; // canvas size for badge textures
@@ -49,6 +56,17 @@ function spriteMaterial(map: THREE.Texture, opacity = 1, solid = false) {
     : new THREE.SpriteMaterial({ map, transparent: true, opacity, depthWrite: false });
 }
 
+function glowMaterial(map: THREE.Texture, color: string, opacity: number) {
+  return new THREE.SpriteMaterial({
+    map,
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+}
+
 const FLOW_VERTEX = /* glsl */ `
   varying vec2 vUv;
   void main() {
@@ -57,33 +75,58 @@ const FLOW_VERTEX = /* glsl */ `
   }
 `;
 
-// Soft bands sliding along the tube from source (v = 0) to target (v = 1):
-// a continuous gradient, no discrete particles.
+// A dim stream with a comet of light travelling from source (v = 0) to target
+// (v = 1): bright head, exponential tail. The head position uses the same
+// formula as pulseHead() so nodes can react exactly when a pulse leaves.
 const FLOW_FRAGMENT = /* glsl */ `
   uniform float uTime;
-  uniform float uSpeed;
-  uniform float uRepeat;
+  uniform float uRate;
+  uniform float uPhase;
   uniform float uOpacity;
   uniform vec3 uColor;
   varying vec2 vUv;
   void main() {
-    float wave = 0.5 + 0.5 * sin(6.2831853 * (vUv.y * uRepeat - uTime * uSpeed));
-    float flow = mix(0.62, 1.0, wave * wave * (3.0 - 2.0 * wave));
-    float ends = smoothstep(0.0, 0.06, vUv.y) * smoothstep(0.0, 0.06, 1.0 - vUv.y);
-    gl_FragColor = vec4(uColor * (0.8 + 0.3 * flow), uOpacity * flow * ends);
+    float head = fract(uTime * uRate + uPhase);
+    float behind = head - vUv.y;
+    float tail = behind >= 0.0 ? exp(-behind * 9.0) : 0.0;
+    float spark = exp(-abs(behind) * 60.0);
+    float ends = smoothstep(0.0, 0.04, vUv.y) * smoothstep(0.0, 0.04, 1.0 - vUv.y);
+    float light = 0.16 + 0.9 * tail + 0.9 * spark;
+    vec3 color = mix(uColor, vec3(1.0), 0.55 * spark + 0.2 * tail);
+    gl_FragColor = vec4(color * light, uOpacity * ends);
   }
 `;
 
+/** Where the pulse of a stream is (0 at the source, 1 at the core), same as the shader. */
+export function pulseHead(t: number, rate: number, phase: number): number {
+  const x = t * rate + phase;
+  return x - Math.floor(x);
+}
+
 export class ResourcePool {
   /** Open tube along +Y, unit height and radius; scaled per link. */
-  readonly tube = new THREE.CylinderGeometry(1, 1, 1, 12, 1, true);
-  /** Shared by every flow material so one update per frame animates all links. */
+  readonly tube = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+  /** Shared by every stream material so one update per frame animates all of them. */
   readonly time = { value: 0 };
+  readonly glow: THREE.CanvasTexture;
   private textures = new Map<string, THREE.Texture>();
   private materials = new Map<string, THREE.Material>();
-  private flowMaterials = new Set<THREE.ShaderMaterial>();
+  private owned = new Set<THREE.Material>();
   private labels = new Set<SpriteText>();
   private disposed = false;
+
+  constructor() {
+    const { canvas, ctx } = canvas2d();
+    const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2);
+    g.addColorStop(0, "rgba(255,255,255,1)");
+    g.addColorStop(0.2, "rgba(255,255,255,0.55)");
+    g.addColorStop(0.5, "rgba(255,255,255,0.12)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, TEX, TEX);
+    this.glow = new THREE.CanvasTexture(canvas);
+    this.glow.colorSpace = THREE.SRGBColorSpace;
+  }
 
   private texture(key: string, draw: (ctx: CanvasRenderingContext2D) => void): THREE.CanvasTexture {
     const cached = this.textures.get(key);
@@ -106,7 +149,18 @@ export class ResourcePool {
     return m as T;
   }
 
-  /** Solid disc with a hairline darker edge, for model nodes. */
+  /** A per-node material (its opacity animates); freed with the pool. */
+  own<T extends THREE.Material>(m: T): T {
+    this.owned.add(m);
+    return m;
+  }
+
+  release(m: THREE.Material) {
+    this.owned.delete(m);
+    m.dispose();
+  }
+
+  /** Solid disc with a hairline darker edge. */
   disc(color: string): THREE.SpriteMaterial {
     return this.material(`disc:${color}`, () =>
       spriteMaterial(
@@ -125,20 +179,19 @@ export class ResourcePool {
     );
   }
 
-  /** Thin circular outline. */
+  /** Thin circular outline texture. */
+  ringTexture(color: string, width: number): THREE.CanvasTexture {
+    return this.texture(`ring:${color}:${width}`, (ctx) => {
+      ctx.beginPath();
+      ctx.arc(TEX / 2, TEX / 2, TEX / 2 - width / 2 - 2, 0, Math.PI * 2);
+      ctx.lineWidth = width;
+      ctx.strokeStyle = color;
+      ctx.stroke();
+    });
+  }
+
   ring(color: string, width: number, opacity = 1): THREE.SpriteMaterial {
-    return this.material(`ring:${color}:${width}:${opacity}`, () =>
-      spriteMaterial(
-        this.texture(`ring:${color}:${width}`, (ctx) => {
-          ctx.beginPath();
-          ctx.arc(TEX / 2, TEX / 2, TEX / 2 - width / 2 - 2, 0, Math.PI * 2);
-          ctx.lineWidth = width;
-          ctx.strokeStyle = color;
-          ctx.stroke();
-        }),
-        opacity,
-      ),
-    );
+    return this.material(`ring:${color}:${width}:${opacity}`, () => spriteMaterial(this.ringTexture(color, width), opacity));
   }
 
   /** Provider logo on a white disc; initials on a dark disc when there is no logo. */
@@ -204,36 +257,33 @@ export class ResourcePool {
     return s;
   }
 
-  flowMaterial(color: string, speed: number): THREE.ShaderMaterial {
-    const m = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: this.time,
-        uSpeed: { value: speed },
-        uRepeat: { value: 4 },
-        uOpacity: { value: FLOW_OPACITY },
-        uColor: { value: new THREE.Color(color) },
-      },
-      vertexShader: FLOW_VERTEX,
-      fragmentShader: FLOW_FRAGMENT,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.flowMaterials.add(m);
-    return m;
-  }
-
-  releaseFlowMaterial(m: THREE.ShaderMaterial) {
-    this.flowMaterials.delete(m);
-    m.dispose();
+  streamMaterial(color: string, rate: number, phase: number): THREE.ShaderMaterial {
+    return this.own(
+      new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: this.time,
+          uRate: { value: rate },
+          uPhase: { value: phase },
+          uOpacity: { value: STREAM_OPACITY },
+          uColor: { value: new THREE.Color(color) },
+        },
+        vertexShader: FLOW_VERTEX,
+        fragmentShader: FLOW_FRAGMENT,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+      }),
+    );
   }
 
   dispose() {
     this.disposed = true;
     this.tube.dispose();
+    this.glow.dispose();
     this.textures.forEach((t) => t.dispose());
     this.materials.forEach((m) => m.dispose());
-    this.flowMaterials.forEach((m) => m.dispose());
+    this.owned.forEach((m) => m.dispose());
     this.labels.forEach((l) => {
       l.material.map?.dispose();
       l.material.dispose();
@@ -241,13 +291,13 @@ export class ResourcePool {
     });
     this.textures.clear();
     this.materials.clear();
-    this.flowMaterials.clear();
+    this.owned.clear();
     this.labels.clear();
   }
 }
 
-export const FLOW_OPACITY = 0.5;
-export const FLOW_OPACITY_LIT = 0.9;
+export const STREAM_OPACITY = 0.75;
+export const STREAM_OPACITY_LIT = 1;
 
 const color = (s: ModelStatus) => STATUS[s].color;
 
@@ -262,6 +312,8 @@ function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim
     hovered: false,
     pulse: 0,
     status: node.status,
+    wobble: 0,
+    wobbleAge: 0,
   };
 }
 
@@ -272,33 +324,77 @@ function alertRing(pool: ResourcePool) {
   return s;
 }
 
+/** Makes a node wobble like a drop of fluid (and flash, if it has a glow). */
+export function kick(anim: NodeAnim, strength: number) {
+  anim.wobble = Math.min(1, Math.max(anim.wobble * Math.exp(-3 * anim.wobbleAge), 0) + strength);
+  anim.wobbleAge = 0;
+}
+
 export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
 
-  const disc = new THREE.Sprite(pool.disc("#1b232e"));
+  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#7cc4ff", 0.55)));
+  halo.scale.setScalar(5.5);
+  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#c8ecff", 0.7)));
+  aura.scale.setScalar(2.6);
+  const disc = new THREE.Sprite(pool.disc("#16202c"));
   disc.scale.setScalar(2);
-  const edge = new THREE.Sprite(pool.ring("#5a6a7e", 8));
+  const edge = new THREE.Sprite(pool.ring("#9fd2f2", 8, 0.9));
   edge.scale.setScalar(2);
-  const dot = new THREE.Sprite(pool.disc("#a9c4d4"));
-  dot.scale.setScalar(0.42);
-  const inner = new THREE.Sprite(pool.ring("#a9c4d4", 5, 0.6));
+  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#ffffff", 1)));
+  heart.scale.setScalar(1.3);
+  const inner = new THREE.Sprite(pool.ring("#cfeaff", 5, 0.7));
   inner.scale.setScalar(1.1);
-  const outer = new THREE.Sprite(pool.ring("#a9c4d4", 3, 0.22));
-  outer.scale.setScalar(2.7);
-  const label = pool.label("LIVE ANALYSIS CORE", 0.14, "#a3adba");
-  label.position.y = -1.75;
-  dot.renderOrder = inner.renderOrder = edge.renderOrder = 1;
+  const label = pool.label("LIVE ANALYSIS CORE", 0.14, "#b8c4d2");
+  label.position.y = -1.85;
 
-  body.add(disc, edge, outer, inner, dot, label);
+  // Ripples spread out from the core when pulses arrive.
+  const ripples = Array.from({ length: 5 }, () => {
+    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 6), "#9fd2f2", 0)));
+    r.visible = false;
+    r.userData.age = 1;
+    return r;
+  });
+
+  halo.renderOrder = -1;
+  edge.renderOrder = inner.renderOrder = heart.renderOrder = 2;
+  body.add(halo, aura, disc, edge, inner, heart, label, ...ripples);
 
   const anim = baseAnim("engine", node, body);
-  anim.animate = (t, motion) => {
-    if (!motion) return;
-    // A slow, quiet pulse: the inner ring and the outer halo ring breathe out of phase.
-    inner.scale.setScalar(1.1 + 0.06 * Math.sin(t * 1.2));
-    outer.scale.setScalar(2.7 + 0.12 * Math.sin(t * 0.8 + 1));
+  let energy = 0.3;
+  let sinceRipple = 0;
+  let next = 0;
+  group.userData.receive = (amount: number) => {
+    energy = Math.min(1, energy + amount);
+    if (sinceRipple > 0.35) {
+      sinceRipple = 0;
+      const r = ripples[next++ % ripples.length];
+      r.userData.age = 0;
+      r.visible = true;
+    }
+  };
+  anim.animate = (t, dt, motion) => {
+    energy = Math.max(0.25, energy * Math.exp(-0.9 * dt));
+    sinceRipple += dt;
+    const breathe = motion ? Math.sin(t * 1.4) : 0;
+    (halo.material as THREE.SpriteMaterial).opacity = 0.35 + 0.35 * energy + 0.05 * breathe;
+    (aura.material as THREE.SpriteMaterial).opacity = 0.45 + 0.4 * energy;
+    heart.scale.setScalar(1.2 + 0.35 * energy + 0.06 * breathe);
+    halo.scale.setScalar(5.2 + 1.2 * energy + 0.2 * breathe);
+    inner.scale.setScalar(1.1 + 0.08 * breathe);
+    for (const r of ripples) {
+      if (!r.visible) continue;
+      r.userData.age += dt / 1.6;
+      const age = r.userData.age as number;
+      if (age >= 1 || !motion) {
+        r.visible = false;
+        continue;
+      }
+      r.scale.setScalar(2 + 4 * age);
+      (r.material as THREE.SpriteMaterial).opacity = 0.55 * (1 - age) * (1 - age);
+    }
   };
   group.userData.anim = anim;
   return group;
@@ -309,24 +405,31 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   const body = new THREE.Group();
   group.add(body);
 
-  const logoMaterial = spriteMaterial(pool.logo(node.name, node.avatar), 1, true);
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), 0.12));
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.setScalar(3.4);
+  glow.renderOrder = -1;
+  const logoMaterial = pool.own(spriteMaterial(pool.logo(node.name, node.avatar), 1, true));
   const logo = new THREE.Sprite(logoMaterial);
   logo.scale.setScalar(2);
   const ring = new THREE.Sprite(pool.ring(color(node.status), 10));
   ring.scale.setScalar(2.3);
   ring.renderOrder = 1;
   const label = pool.label(node.name, 0.3);
-  label.position.y = -1.55;
-  body.add(logo, ring, label);
+  label.position.y = -1.6;
+  body.add(glow, logo, ring, label);
 
   const anim = baseAnim("provider", node, body);
   anim.ring = ring;
+  anim.glow = glow;
   if (node.status === "security_incident") {
     anim.alert = alertRing(pool);
     body.add(anim.alert);
   }
-  // The logo material isn't pooled (one per provider): dispose it with the node.
-  group.userData.dispose = () => logoMaterial.dispose();
+  group.userData.dispose = () => {
+    pool.release(logoMaterial);
+    pool.release(glowMat);
+  };
   group.userData.anim = anim;
   return group;
 }
@@ -335,15 +438,21 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), 0.1));
+  const glow = new THREE.Sprite(glowMat);
+  glow.scale.setScalar(3.2);
+  glow.renderOrder = -1;
   const disc = new THREE.Sprite(pool.disc(color(node.status)));
   disc.scale.setScalar(2);
-  body.add(disc);
+  body.add(glow, disc);
   const anim = baseAnim("model", node, body);
   anim.disc = disc;
+  anim.glow = glow;
   if (node.status === "security_incident") {
     anim.alert = alertRing(pool);
     body.add(anim.alert);
   }
+  group.userData.dispose = () => pool.release(glowMat);
   group.userData.anim = anim;
   return group;
 }
@@ -354,6 +463,7 @@ export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatu
   anim.status = status;
   if (anim.disc) anim.disc.material = pool.disc(color(status));
   if (anim.ring) anim.ring.material = pool.ring(color(status), 10);
+  if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(color(status));
   if (status === "security_incident" && !anim.alert) {
     anim.alert = alertRing(pool);
     anim.body.add(anim.alert);
@@ -363,41 +473,68 @@ export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatu
   }
 }
 
-/** One frame of node animation: eased size, idle float, hover and update pulses. */
+/**
+ * One frame of node animation: eased size, idle float, a slow fluid "breathing"
+ * and the damped squash-and-stretch wobble triggered by each light pulse.
+ */
 export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boolean) {
   const hover = anim.hovered ? 1.15 : 1;
   anim.pulse = Math.max(0, anim.pulse - dt);
   const pulse = anim.pulse > 0 ? 1 + 0.2 * Math.sin((anim.pulse / 1.2) * Math.PI) : 1;
   const goal = anim.target * hover * pulse;
   anim.scale = motion ? anim.scale + (goal - anim.scale) * Math.min(1, dt * 5) : goal;
-  anim.body.scale.setScalar(Math.max(0.0001, anim.scale * anim.radius));
+  const size = Math.max(0.0001, anim.scale * anim.radius);
 
+  let sx = 1;
+  let sy = 1;
+  let flash = 0;
   if (motion && anim.kind !== "engine") {
+    anim.wobbleAge += dt;
+    const w = anim.wobble * Math.exp(-3 * anim.wobbleAge);
+    const jelly = 0.22 * w * Math.sin(16 * anim.wobbleAge);
+    const breathe = 0.035 * Math.sin(t * 1.6 + anim.phase);
+    const breathe2 = 0.035 * Math.sin(t * 1.6 + anim.phase + Math.PI / 2);
+    sx = 1 + jelly + breathe;
+    sy = 1 - jelly + breathe2;
+    flash = w;
     const amp = anim.kind === "provider" ? 1 : 0.5;
     anim.body.position.y = Math.sin(t * 0.5 + anim.phase) * amp;
     anim.body.position.x = Math.cos(t * 0.4 + anim.phase) * amp * 0.5;
   } else {
     anim.body.position.set(0, 0, 0);
   }
+  anim.body.scale.set(size * sx, size * sy, size);
 
+  if (anim.glow) {
+    (anim.glow.material as THREE.SpriteMaterial).opacity = (anim.kind === "provider" ? 0.12 : 0.1) + 0.55 * flash;
+  }
   if (anim.alert) anim.alert.scale.setScalar(motion ? 2.6 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.5)) : 2.8);
-  anim.animate?.(t, motion);
+  anim.animate?.(t, dt, motion);
 }
 
 export function disposeNode(group: THREE.Object3D) {
   (group.userData.dispose as (() => void) | undefined)?.();
 }
 
-/** A thick tube carrying a continuous flow from a provider into the core. */
-export function createFlowLink(pool: ResourcePool, colorHex: string, width: number, speed: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(pool.tube, pool.flowMaterial(colorHex, speed));
+/** A tube carrying light pulses from a node into the core. */
+export function createStream(
+  pool: ResourcePool,
+  colorHex: string,
+  width: number,
+  rate: number,
+  phase: number,
+): THREE.Mesh {
+  const material = pool.streamMaterial(colorHex, rate, phase);
+  const mesh = new THREE.Mesh(pool.tube, material);
   mesh.userData.width = width;
-  mesh.userData.dispose = () => pool.releaseFlowMaterial(mesh.material as THREE.ShaderMaterial);
+  mesh.userData.rate = rate;
+  mesh.userData.phase = phase;
+  mesh.userData.dispose = () => pool.release(material);
   return mesh;
 }
 
-/** Stretches a flow tube between two points, stopping at the nodes' edges. */
-export function placeFlowLink(
+/** Stretches a stream between two points, stopping at the nodes' edges. */
+export function placeStream(
   mesh: THREE.Mesh,
   start: THREE.Vector3Like,
   end: THREE.Vector3Like,
@@ -416,6 +553,4 @@ export function placeFlowLink(
   mesh.quaternion.setFromUnitVectors(UP, dir);
   const width = mesh.userData.width as number;
   mesh.scale.set(width, length, width);
-  // Keep the bands evenly spaced whatever the link length.
-  (mesh.material as THREE.ShaderMaterial).uniforms.uRepeat.value = length / 70;
 }
