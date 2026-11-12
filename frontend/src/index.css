@@ -7,7 +7,7 @@
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  background: #02030a;
+  background: #080D1C;
   font-family: var(--font-sans);
   font-feature-settings: "cv11", "ss01"; /* Inter's single-storey a and open digits */
   -webkit-font-smoothing: antialiased;
@@ -26,16 +26,16 @@ body {
   padding: 0 !important;
 }
 .net-tip {
-  background: rgba(7, 10, 24, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: rgba(12, 19, 40, 0.94);
+  border: 1px solid rgba(64, 218, 204, 0.25);
   border-radius: 8px;
   padding: 8px 10px;
   font: 12px/1.5 var(--font-sans);
   font-variant-numeric: tabular-nums;
-  color: #d5dbe3;
+  color: #DCE7FF;
   max-width: 260px;
 }
-.net-tip b { font-weight: 600; color: #f1f4f8; }
+.net-tip b { font-weight: 600; color: #DCE7FF; }
 .net-tip-sub { color: #8b95a3; display: flex; align-items: center; }
 
 @media (prefers-reduced-motion: reduce) {

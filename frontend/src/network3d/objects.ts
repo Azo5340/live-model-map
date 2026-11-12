@@ -1,26 +1,28 @@
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
-import { STATUS } from "../format";
+import { STATUS, THEME } from "../format";
 import type { ModelStatus } from "../types";
-import type { GNode } from "./graphData";
+import type { GNode, Tier } from "./graphData";
 
 /**
  * Three.js objects for the 3D network.
  *
- * Nodes are flat camera-facing badges (no shading or reflections) that behave
- * like drops of fluid: they breathe gently and wobble each time they send a
- * light pulse. Every node is linked to a bright core by a stream on which comet
- * pulses travel; the core gains energy and ripples as pulses arrive.
+ * Nodes are camera-facing badges on a deep-navy background: providers show their
+ * logo in a status ring, models are soft orbs. Size, glow and label follow a
+ * three-tier hierarchy (main / secondary / minor). Each node fades smoothly when
+ * the view focuses on something else. Every node is linked to a softly lit core
+ * by a stream on which short trains of light roll in.
  *
  * Each node is a Group whose `body` child holds the visuals: the force
- * simulation moves the Group, the animation loop scales, wobbles and floats the
- * body. Textures and materials are shared through a ResourcePool and disposed
- * together when the view unmounts.
+ * simulation moves the Group, the animation loop scales, wobbles, floats and
+ * fades the body. Textures are shared through a ResourcePool; per-node materials
+ * (needed for fading) are owned by the pool and freed with it.
  */
 
 export interface NodeAnim {
   body: THREE.Group;
   kind: GNode["kind"];
+  tier: Tier;
   /** Animated scale factor, eased toward `target` (0 → 1 when a node appears). */
   scale: number;
   target: number;
@@ -36,32 +38,34 @@ export interface NodeAnim {
   /** How far the node is drawn toward the core (0..1) while its light train travels, and which way. */
   pull: number;
   pullDir: THREE.Vector3;
+  /** Focus fading: current visibility and where it is heading (1 = full, lower = dimmed). */
+  fade: number;
+  fadeTarget: number;
+  /** Materials whose opacity follows `fade`, with their resting opacity. */
+  fadeables: { m: THREE.SpriteMaterial; base: number }[];
   disc?: THREE.Sprite;
   ring?: THREE.Sprite;
   glow?: THREE.Sprite;
+  glowBase: number;
+  label?: THREE.Sprite;
+  /** Minor providers only show their name when in focus. */
+  labelAlways: boolean;
   alert?: THREE.Sprite;
   animate?: (t: number, dt: number, motion: boolean) => void;
 }
 
 const TEX = 256; // canvas size for badge textures
+const UP = new THREE.Vector3(0, 1, 0);
 
 /** Decorative objects (glows, rings, labels, streams) are skipped by mouse picking, which only tests node badges. */
 function noPick<T extends THREE.Object3D>(...objects: T[]): void {
   for (const o of objects) o.raycast = () => {};
 }
-const UP = new THREE.Vector3(0, 1, 0);
 
 function canvas2d() {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = TEX;
   return { canvas, ctx: canvas.getContext("2d")! };
-}
-
-/** Outlines and overlays blend; solid badges write depth so nearer nodes cleanly hide farther ones. */
-function spriteMaterial(map: THREE.Texture, opacity = 1, solid = false) {
-  return solid
-    ? new THREE.SpriteMaterial({ map, transparent: true, alphaTest: 0.5, depthWrite: true })
-    : new THREE.SpriteMaterial({ map, transparent: true, opacity, depthWrite: false });
 }
 
 function glowMaterial(map: THREE.Texture, color: string, opacity: number) {
@@ -83,10 +87,10 @@ const FLOW_VERTEX = /* glsl */ `
   }
 `;
 
-// A dim stream with a *train* of light travelling from source (v = 0) to target
-// (v = 1): a bright headlight followed by a few cars, measured in scene units so
-// they look the same on short and long links. The head position uses the same
-// formula as pulseHead() so nodes move in step with their train.
+// A faint stream with a *train* of light travelling from source (v = 0) to target
+// (v = 1): a headlight followed by a few cars, measured in scene units so they
+// look the same on short and long links. The head position uses the same formula
+// as pulseHead() so nodes move in step with their train.
 const FLOW_FRAGMENT = /* glsl */ `
   uniform float uTime;
   uniform float uRate;
@@ -107,8 +111,8 @@ const FLOW_FRAGMENT = /* glsl */ `
     float train = inTrain * car * fade;
     float headlight = exp(-abs(behind) * 0.35);
     float ends = smoothstep(0.0, 0.03, vUv.y) * smoothstep(0.0, 0.03, 1.0 - vUv.y);
-    float light = 0.09 + 1.05 * train + 1.5 * headlight;
-    vec3 color = mix(uColor, vec3(1.0), clamp(0.7 * headlight + 0.25 * train, 0.0, 1.0));
+    float light = 0.35 + 0.9 * train + 1.1 * headlight;
+    vec3 color = mix(uColor, vec3(0.86, 0.91, 1.0), clamp(0.45 * headlight + 0.15 * train, 0.0, 1.0));
     gl_FragColor = vec4(color * light, uOpacity * ends);
   }
 `;
@@ -126,17 +130,17 @@ export class ResourcePool {
   readonly time = { value: 0 };
   readonly glow: THREE.CanvasTexture;
   private textures = new Map<string, THREE.Texture>();
-  private materials = new Map<string, THREE.Material>();
   private owned = new Set<THREE.Material>();
   private labels = new Set<SpriteText>();
   private disposed = false;
 
   constructor() {
+    // A soft, wide falloff: diffuse halos rather than hard white blobs.
     const { canvas, ctx } = canvas2d();
     const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2);
-    g.addColorStop(0, "rgba(255,255,255,1)");
-    g.addColorStop(0.2, "rgba(255,255,255,0.55)");
-    g.addColorStop(0.5, "rgba(255,255,255,0.12)");
+    g.addColorStop(0, "rgba(255,255,255,0.85)");
+    g.addColorStop(0.25, "rgba(255,255,255,0.4)");
+    g.addColorStop(0.6, "rgba(255,255,255,0.08)");
     g.addColorStop(1, "rgba(255,255,255,0)");
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, TEX, TEX);
@@ -156,15 +160,6 @@ export class ResourcePool {
     return t;
   }
 
-  material<T extends THREE.Material>(key: string, make: () => T): T {
-    let m = this.materials.get(key);
-    if (!m) {
-      m = make();
-      this.materials.set(key, m);
-    }
-    return m as T;
-  }
-
   /** A per-node material (its opacity animates); freed with the pool. */
   own<T extends THREE.Material>(m: T): T {
     this.owned.add(m);
@@ -176,89 +171,55 @@ export class ResourcePool {
     m.dispose();
   }
 
-  /** A luminous orb: white-hot center fading through the color to transparent (additive). */
-  orb(color: string): THREE.SpriteMaterial {
-    return this.material(`orb:${color}`, () =>
-      glowMaterial(
-        this.texture(`orb:${color}`, (ctx) => {
-          const c = new THREE.Color(color);
-          const rgb = (a: number) => `rgba(${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)},${a})`;
-          const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2);
-          g.addColorStop(0, "rgba(255,255,255,1)");
-          g.addColorStop(0.18, "rgba(255,255,255,0.95)");
-          g.addColorStop(0.32, rgb(0.95));
-          g.addColorStop(0.55, rgb(0.45));
-          g.addColorStop(1, rgb(0));
-          ctx.fillStyle = g;
-          ctx.fillRect(0, 0, TEX, TEX);
-        }),
-        "#ffffff",
-        1,
-      ),
-    );
-  }
-
-  /** Thin light rays radiating from the center, for the core's starburst. */
-  starburst(): THREE.CanvasTexture {
-    return this.texture("starburst", (ctx) => {
-      ctx.translate(TEX / 2, TEX / 2);
-      for (let i = 0; i < 28; i++) {
-        const long = i % 2 === 0;
-        const len = (TEX / 2) * (long ? 0.98 : 0.62);
-        const g = ctx.createLinearGradient(0, 0, len, 0);
-        g.addColorStop(0, "rgba(255,255,255,0.9)");
-        g.addColorStop(1, "rgba(255,255,255,0)");
-        ctx.strokeStyle = g;
-        ctx.lineWidth = long ? 2.2 : 1.4;
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(len, 0);
-        ctx.stroke();
-        ctx.rotate((Math.PI * 2) / 28);
-      }
+  /** A soft orb: a light center easing into the color, then a clean edge (white texture, tinted per node). */
+  orbTexture(): THREE.CanvasTexture {
+    return this.texture("orb", (ctx) => {
+      const g = ctx.createRadialGradient(TEX / 2, TEX / 2, 0, TEX / 2, TEX / 2, TEX / 2 - 4);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.3, "rgba(255,255,255,0.92)");
+      g.addColorStop(0.8, "rgba(255,255,255,0.7)");
+      g.addColorStop(0.97, "rgba(255,255,255,0.55)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(TEX / 2, TEX / 2, TEX / 2 - 4, 0, Math.PI * 2);
+      ctx.fill();
     });
   }
 
-  /** Solid disc with a hairline darker edge. */
-  disc(color: string): THREE.SpriteMaterial {
-    return this.material(`disc:${color}`, () =>
-      spriteMaterial(
-        this.texture(`disc:${color}`, (ctx) => {
-          ctx.beginPath();
-          ctx.arc(TEX / 2, TEX / 2, TEX / 2 - 6, 0, Math.PI * 2);
-          ctx.fillStyle = color;
-          ctx.fill();
-          ctx.lineWidth = 6;
-          ctx.strokeStyle = "rgba(0,0,0,0.35)";
-          ctx.stroke();
-        }),
-        1,
-        true,
-      ),
-    );
-  }
-
-  /** Thin circular outline texture. */
-  ringTexture(color: string, width: number): THREE.CanvasTexture {
-    return this.texture(`ring:${color}:${width}`, (ctx) => {
+  /** Circular outline with the same relative stroke for every node. */
+  ringTexture(width: number): THREE.CanvasTexture {
+    return this.texture(`ring:${width}`, (ctx) => {
       ctx.beginPath();
       ctx.arc(TEX / 2, TEX / 2, TEX / 2 - width / 2 - 2, 0, Math.PI * 2);
       ctx.lineWidth = width;
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = "#ffffff";
       ctx.stroke();
     });
   }
 
-  /** A glowing status ring (additive) around provider logos. */
-  glowRing(color: string): THREE.SpriteMaterial {
-    return this.material(`glowring:${color}`, () => glowMaterial(this.ringTexture("#ffffff", 12), color, 0.95));
+  /** Thin light rays radiating from the center, for the core. */
+  starburst(): THREE.CanvasTexture {
+    return this.texture("starburst", (ctx) => {
+      ctx.translate(TEX / 2, TEX / 2);
+      for (let i = 0; i < 24; i++) {
+        const long = i % 2 === 0;
+        const len = (TEX / 2) * (long ? 0.95 : 0.6);
+        const g = ctx.createLinearGradient(0, 0, len, 0);
+        g.addColorStop(0, "rgba(255,255,255,0.7)");
+        g.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.strokeStyle = g;
+        ctx.lineWidth = long ? 1.8 : 1.2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(len, 0);
+        ctx.stroke();
+        ctx.rotate((Math.PI * 2) / 24);
+      }
+    });
   }
 
-  ring(color: string, width: number, opacity = 1): THREE.SpriteMaterial {
-    return this.material(`ring:${color}:${width}:${opacity}`, () => spriteMaterial(this.ringTexture(color, width), opacity));
-  }
-
-  /** Provider logo on a white disc; initials on a dark disc when there is no logo. */
+  /** Provider logo filling a disc like a round avatar; initials on navy when there is no logo. */
   logo(provider: string, url: string | null | undefined): THREE.Texture {
     const key = `logo:${provider}|${url ?? ""}`;
     const cached = this.textures.get(key);
@@ -275,9 +236,9 @@ export class ResourcePool {
       ctx.closePath();
     };
     disc();
-    ctx.fillStyle = "#1b2029";
+    ctx.fillStyle = "#14203d";
     ctx.fill();
-    ctx.fillStyle = "#c9d1db";
+    ctx.fillStyle = THEME.text;
     ctx.font = `600 ${TEX * 0.32}px "Inter Variable", Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -297,16 +258,15 @@ export class ResourcePool {
         ctx.fill();
         ctx.clip();
         // Hugging Face avatars are made for circular crops: fill the disc ("cover"),
-        // centered, like a profile picture, instead of letterboxing a square in a circle.
+        // centered and undistorted, like a profile picture.
         const scale = Math.max(TEX / img.width, TEX / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
         ctx.drawImage(img, (TEX - w) / 2, (TEX - h) / 2, w, h);
         ctx.restore();
-        // Hairline edge so light logos still read as a disc.
         disc();
         ctx.lineWidth = 5;
-        ctx.strokeStyle = "rgba(10,14,30,0.55)";
+        ctx.strokeStyle = "rgba(8,13,28,0.6)";
         ctx.stroke();
         texture.needsUpdate = true;
       };
@@ -315,7 +275,7 @@ export class ResourcePool {
     return texture;
   }
 
-  label(text: string, height: number, color = "#9aa4b2"): SpriteText {
+  label(text: string, height: number, color: string = THEME.text): SpriteText {
     const s = new SpriteText(text, height, color);
     s.fontFace = '"Inter Variable", Inter, system-ui, sans-serif';
     s.fontWeight = "500";
@@ -326,14 +286,14 @@ export class ResourcePool {
     return s;
   }
 
-  streamMaterial(color: string, rate: number, phase: number): THREE.ShaderMaterial {
+  streamMaterial(color: string, rate: number, phase: number, opacity: number): THREE.ShaderMaterial {
     return this.own(
       new THREE.ShaderMaterial({
         uniforms: {
           uTime: this.time,
           uRate: { value: rate },
           uPhase: { value: phase },
-          uOpacity: { value: STREAM_OPACITY },
+          uOpacity: { value: opacity },
           uLength: { value: 100 },
           uColor: { value: new THREE.Color(color) },
         },
@@ -352,7 +312,6 @@ export class ResourcePool {
     this.tube.dispose();
     this.glow.dispose();
     this.textures.forEach((t) => t.dispose());
-    this.materials.forEach((m) => m.dispose());
     this.owned.forEach((m) => m.dispose());
     this.labels.forEach((l) => {
       l.material.map?.dispose();
@@ -360,22 +319,27 @@ export class ResourcePool {
       l.geometry.dispose();
     });
     this.textures.clear();
-    this.materials.clear();
     this.owned.clear();
     this.labels.clear();
   }
 }
 
-export const STREAM_OPACITY = 0.5;
-const BASE_GLOW = { provider: 0.2, model: 0.16 };
-export const STREAM_OPACITY_LIT = 1;
+/** Opacity of a dimmed (out-of-focus) node. */
+export const DIMMED = 0.16;
 
 const color = (s: ModelStatus) => STATUS[s].color;
+
+// Glow strength by tier: more important nodes glow more, minor ones barely.
+const GLOW = {
+  provider: { opacity: [0.24, 0.15, 0.08], scale: [2.7, 2.45, 2.2] },
+  model: { opacity: [0.22, 0.12, 0.06], scale: [2.8, 2.5, 2.2] },
+};
 
 function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim {
   return {
     body,
     kind,
+    tier: node.tier,
     scale: 0,
     target: 1,
     radius: node.radius,
@@ -387,18 +351,29 @@ function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim
     wobbleAge: 0,
     pull: 0,
     pullDir: new THREE.Vector3(),
+    fade: 1,
+    fadeTarget: 1,
+    fadeables: [],
+    glowBase: 0,
+    labelAlways: true,
   };
 }
 
-/** A violet ring that slowly breathes around security incidents. */
-function alertRing(pool: ResourcePool) {
-  const s = new THREE.Sprite(pool.ring(STATUS.security_incident.color, 10, 0.8));
-  s.scale.setScalar(2.8);
+function fadeable(anim: NodeAnim, m: THREE.SpriteMaterial) {
+  anim.fadeables.push({ m, base: m.opacity });
+}
+
+/** A ring that slowly breathes around security incidents. */
+function alertRing(pool: ResourcePool, anim: NodeAnim) {
+  const m = pool.own(glowMaterial(pool.ringTexture(10), STATUS.security_incident.color, 0.75));
+  const s = new THREE.Sprite(m);
+  s.scale.setScalar(2.7);
   noPick(s);
+  fadeable(anim, m);
   return s;
 }
 
-/** Makes a node wobble like a drop of fluid (and flash, if it has a glow). */
+/** Makes a node wobble like a drop of fluid (and brighten briefly). */
 export function kick(anim: NodeAnim, strength: number) {
   anim.wobble = Math.min(1, Math.max(anim.wobble * Math.exp(-3 * anim.wobbleAge), 0) + strength);
   anim.wobbleAge = 0;
@@ -409,35 +384,36 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   const body = new THREE.Group();
   group.add(body);
 
-  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#4f8dff", 0.6)));
-  halo.scale.setScalar(6);
-  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#8f6bff", 0.18)));
-  nebula.scale.setScalar(8.5);
-  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#bfe3ff", 0.9)));
-  aura.scale.setScalar(3.6);
-  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#d6ecff", 0.55)));
-  rays.scale.setScalar(8);
-  const rays2 = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#a9b8ff", 0.3)));
-  rays2.scale.setScalar(5.5);
-  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#ffffff", 1)));
-  heart.scale.setScalar(2);
-  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 5), "#9fd2ff", 0.5)));
-  edge.scale.setScalar(2.4);
-  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 4), "#d9efff", 0.6)));
-  inner.scale.setScalar(1.3);
-  const label = pool.label("LIVE ANALYSIS CORE", 0.12, "#c9d8f2");
-  label.position.y = -2.4;
+  // A diffuse electric-blue core: no pure white, a gradual falloff into the
+  // network, so it stays the focal point without washing out the center.
+  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.blue, 0.4)));
+  halo.scale.setScalar(4.6);
+  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.violet, 0.1)));
+  nebula.scale.setScalar(7);
+  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#6aa2ff", 0.32)));
+  aura.scale.setScalar(2.5);
+  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#8fb6ff", 0.14)));
+  rays.scale.setScalar(4.4);
+  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#bcd3ff", 0.7)));
+  heart.scale.setScalar(1.15);
+  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), THEME.blue, 0.45)));
+  edge.scale.setScalar(2.2);
+  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(4), "#9cc0ff", 0.3)));
+  inner.scale.setScalar(1.35);
+  const label = pool.label("LIVE ANALYSIS CORE", 0.13, THEME.text);
+  label.material.opacity = 0.75;
+  label.position.y = -1.75;
 
-  // Ripples spread out from the core when pulses arrive.
-  const ripples = Array.from({ length: 5 }, () => {
-    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture("#ffffff", 6), "#9fd2f2", 0)));
+  // Ripples spread out from the core when trains arrive.
+  const ripples = Array.from({ length: 4 }, () => {
+    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), "#6aa2ff", 0)));
     r.visible = false;
     r.userData.age = 1;
     return r;
   });
 
-  noPick(nebula, halo, rays, rays2, aura, edge, inner, label, ...ripples);
-  body.add(nebula, halo, rays, rays2, aura, edge, inner, heart, label, ...ripples);
+  noPick(nebula, halo, rays, aura, edge, inner, label, ...ripples);
+  body.add(nebula, halo, rays, aura, edge, inner, heart, label, ...ripples);
 
   const anim = baseAnim("engine", node, body);
   let energy = 0.3;
@@ -445,7 +421,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   let next = 0;
   group.userData.receive = (amount: number) => {
     energy = Math.min(1, energy + amount);
-    if (sinceRipple > 0.35) {
+    if (sinceRipple > 0.5) {
       sinceRipple = 0;
       const r = ripples[next++ % ripples.length];
       r.userData.age = 0;
@@ -455,28 +431,24 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   anim.animate = (t, dt, motion) => {
     energy = Math.max(0.25, energy * Math.exp(-0.9 * dt));
     sinceRipple += dt;
-    const breathe = motion ? Math.sin(t * 1.4) : 0;
-    (halo.material as THREE.SpriteMaterial).opacity = 0.3 + 0.25 * energy + 0.04 * breathe;
-    (aura.material as THREE.SpriteMaterial).opacity = 0.4 + 0.3 * energy;
-    (rays.material as THREE.SpriteMaterial).opacity = 0.25 + 0.3 * energy;
-    heart.scale.setScalar(1.4 + 0.45 * energy + 0.06 * breathe);
-    halo.scale.setScalar(5 + 1.2 * energy + 0.2 * breathe);
-    rays.scale.setScalar(5.5 + 1.5 * energy);
-    if (motion) {
-      (rays.material as THREE.SpriteMaterial).rotation = t * 0.05;
-      (rays2.material as THREE.SpriteMaterial).rotation = -t * 0.08;
-    }
-    inner.scale.setScalar(1.3 + 0.1 * breathe);
+    const breathe = motion ? Math.sin(t * 1.2) : 0;
+    (halo.material as THREE.SpriteMaterial).opacity = 0.3 + 0.16 * energy + 0.03 * breathe;
+    (aura.material as THREE.SpriteMaterial).opacity = 0.3 + 0.16 * energy;
+    (rays.material as THREE.SpriteMaterial).opacity = 0.08 + 0.1 * energy;
+    heart.scale.setScalar(1.05 + 0.2 * energy + 0.04 * breathe);
+    halo.scale.setScalar(5 + 0.9 * energy + 0.15 * breathe);
+    if (motion) (rays.material as THREE.SpriteMaterial).rotation = t * 0.03;
+    inner.scale.setScalar(1.35 + 0.06 * breathe);
     for (const r of ripples) {
       if (!r.visible) continue;
-      r.userData.age += dt / 1.6;
+      r.userData.age += dt / 1.8;
       const age = r.userData.age as number;
       if (age >= 1 || !motion) {
         r.visible = false;
         continue;
       }
-      r.scale.setScalar(2.4 + 6 * age);
-      (r.material as THREE.SpriteMaterial).opacity = 0.6 * (1 - age) * (1 - age);
+      r.scale.setScalar(2.2 + 4.5 * age);
+      (r.material as THREE.SpriteMaterial).opacity = 0.32 * (1 - age) * (1 - age);
     }
   };
   group.userData.anim = anim;
@@ -487,32 +459,43 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
+  const anim = baseAnim("provider", node, body);
 
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.provider));
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), GLOW.provider.opacity[node.tier]));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3);
-  const logoMaterial = pool.own(spriteMaterial(pool.logo(node.name, node.avatar), 1, true));
-  logoMaterial.color.set("#c8c8c8"); // neutral dim: true logo colors, kept under the bloom threshold
-  const logo = new THREE.Sprite(logoMaterial);
+  glow.scale.setScalar(GLOW.provider.scale[node.tier]);
+  const logoMat = pool.own(
+    new THREE.SpriteMaterial({ map: pool.logo(node.name, node.avatar), transparent: true, depthWrite: false }),
+  );
+  logoMat.color.set("#cfcfcf"); // neutral dim: true logo colors, kept under the bloom threshold
+  const logo = new THREE.Sprite(logoMat);
   logo.scale.setScalar(2);
-  const ring = new THREE.Sprite(pool.glowRing(color(node.status)));
-  ring.scale.setScalar(2.35);
-  const label = pool.label(node.name, 0.3, "#c3cee6");
-  label.position.y = -1.7;
+  logo.renderOrder = 2;
+  const ringMat = pool.own(glowMaterial(pool.ringTexture(9), color(node.status), 0.85));
+  const ring = new THREE.Sprite(ringMat);
+  ring.scale.setScalar(2.22);
+  ring.renderOrder = 3;
+  const label = pool.label(node.name, 0.26, THEME.text);
+  label.material.opacity = 0.82;
+  label.position.y = -1.55;
+  label.renderOrder = 3;
+  // Minor providers keep their name for when they're in focus, to avoid label clutter.
+  anim.labelAlways = node.tier < 2;
+  label.visible = anim.labelAlways;
+
   noPick(glow, ring, label);
   body.add(glow, logo, ring, label);
 
-  const anim = baseAnim("provider", node, body);
   anim.ring = ring;
   anim.glow = glow;
+  anim.glowBase = glowMat.opacity;
+  anim.label = label;
+  for (const m of [glowMat, logoMat, ringMat, label.material]) fadeable(anim, m);
   if (node.status === "security_incident") {
-    anim.alert = alertRing(pool);
+    anim.alert = alertRing(pool, anim);
     body.add(anim.alert);
   }
-  group.userData.dispose = () => {
-    pool.release(logoMaterial);
-    pool.release(glowMat);
-  };
+  group.userData.dispose = () => [glowMat, logoMat, ringMat].forEach((m) => pool.release(m));
   group.userData.anim = anim;
   return group;
 }
@@ -521,51 +504,68 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   const group = new THREE.Group();
   const body = new THREE.Group();
   group.add(body);
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.model));
+  const anim = baseAnim("model", node, body);
+
+  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), GLOW.model.opacity[node.tier]));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3);
-  const disc = new THREE.Sprite(pool.orb(color(node.status)));
-  disc.scale.setScalar(2.4);
+  glow.scale.setScalar(GLOW.model.scale[node.tier]);
+  const orbMat = pool.own(
+    new THREE.SpriteMaterial({ map: pool.orbTexture(), color: new THREE.Color(color(node.status)), transparent: true, depthWrite: false }),
+  );
+  const disc = new THREE.Sprite(orbMat);
+  disc.scale.setScalar(2);
+  disc.renderOrder = 1;
   noPick(glow);
   body.add(glow, disc);
-  const anim = baseAnim("model", node, body);
+
   anim.disc = disc;
   anim.glow = glow;
+  anim.glowBase = glowMat.opacity;
+  for (const m of [glowMat, orbMat]) fadeable(anim, m);
   if (node.status === "security_incident") {
-    anim.alert = alertRing(pool);
+    anim.alert = alertRing(pool, anim);
     body.add(anim.alert);
   }
-  group.userData.dispose = () => pool.release(glowMat);
+  group.userData.dispose = () => [glowMat, orbMat].forEach((m) => pool.release(m));
   group.userData.anim = anim;
   return group;
 }
 
-/** Applies a status change to an existing node. */
+/** Applies a status change to an existing node (colors only; the hierarchy is unchanged). */
 export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatus) {
   if (anim.status === status) return;
   anim.status = status;
-  if (anim.disc) anim.disc.material = pool.orb(color(status));
-  if (anim.ring) anim.ring.material = pool.glowRing(color(status));
-  if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(color(status));
+  const c = color(status);
+  if (anim.disc) (anim.disc.material as THREE.SpriteMaterial).color.set(c);
+  if (anim.ring) (anim.ring.material as THREE.SpriteMaterial).color.set(c);
+  if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(c);
   if (status === "security_incident" && !anim.alert) {
-    anim.alert = alertRing(pool);
+    anim.alert = alertRing(pool, anim);
     anim.body.add(anim.alert);
   } else if (status !== "security_incident" && anim.alert) {
     anim.body.remove(anim.alert);
+    anim.fadeables = anim.fadeables.filter((f) => f.m !== anim.alert!.material);
+    pool.release(anim.alert.material);
     anim.alert = undefined;
   }
 }
 
+/** Focus state of a node: in focus, dimmed, or neutral (no focus anywhere). */
+export function setFocus(anim: NodeAnim, visible: boolean, labelled: boolean) {
+  anim.fadeTarget = visible ? 1 : DIMMED;
+  if (anim.label && !anim.labelAlways) anim.label.visible = labelled;
+}
+
 /**
- * One frame of node animation: eased size, idle float, a slow fluid "breathing"
- * and the damped squash-and-stretch wobble triggered by each light pulse.
+ * One frame of node animation: eased size, idle float, a slow fluid breathing,
+ * the damped wobble triggered by each light train, hover emphasis and focus fading.
  */
 export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boolean) {
-  const hover = anim.hovered ? 1.15 : 1;
+  const hover = anim.hovered ? 1.12 : 1;
   anim.pulse = Math.max(0, anim.pulse - dt);
-  const pulse = anim.pulse > 0 ? 1 + 0.2 * Math.sin((anim.pulse / 1.2) * Math.PI) : 1;
+  const pulse = anim.pulse > 0 ? 1 + 0.15 * Math.sin((anim.pulse / 1.2) * Math.PI) : 1;
   const goal = anim.target * hover * pulse;
-  anim.scale = motion ? anim.scale + (goal - anim.scale) * Math.min(1, dt * 5) : goal;
+  anim.scale = motion ? anim.scale + (goal - anim.scale) * Math.min(1, dt * 6) : goal;
   const size = Math.max(0.0001, anim.scale * anim.radius);
 
   let sx = 1;
@@ -574,29 +574,34 @@ export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boole
   if (motion && anim.kind !== "engine") {
     anim.wobbleAge += dt;
     const w = anim.wobble * Math.exp(-3 * anim.wobbleAge);
-    const jelly = 0.22 * w * Math.sin(16 * anim.wobbleAge);
-    const breathe = 0.035 * Math.sin(t * 1.6 + anim.phase);
-    const breathe2 = 0.035 * Math.sin(t * 1.6 + anim.phase + Math.PI / 2);
+    const jelly = 0.12 * w * Math.sin(16 * anim.wobbleAge);
+    const breathe = 0.02 * Math.sin(t * 1.4 + anim.phase);
+    const breathe2 = 0.02 * Math.sin(t * 1.4 + anim.phase + Math.PI / 2);
     sx = 1 + jelly + breathe;
     sy = 1 - jelly + breathe2;
     flash = w;
     const amp = anim.kind === "provider" ? 1.5 : 0.8;
     anim.body.position.set(Math.cos(t * 0.4 + anim.phase) * amp * 0.5, Math.sin(t * 0.5 + anim.phase) * amp, 0);
-    // Drawn toward the core while its train travels, then springing back.
-    anim.body.position.addScaledVector(anim.pullDir, anim.pull * anim.radius * 0.35);
-    // Stretched along the pull, like a drop being tugged.
-    sy += 0.12 * anim.pull;
-    sx -= 0.06 * anim.pull;
+    anim.body.position.addScaledVector(anim.pullDir, anim.pull * anim.radius * 0.3);
+    sy += 0.06 * anim.pull;
+    sx -= 0.03 * anim.pull;
   } else {
     anim.body.position.set(0, 0, 0);
   }
   anim.body.scale.set(size * sx, size * sy, size);
 
-  if (anim.glow) {
-    (anim.glow.material as THREE.SpriteMaterial).opacity =
-      (anim.kind === "provider" ? BASE_GLOW.provider : BASE_GLOW.model) + 0.6 * flash;
+  // Focus fading: ease every material toward its resting opacity × fade.
+  const fadeMoving = Math.abs(anim.fade - anim.fadeTarget) > 0.004;
+  if (fadeMoving) anim.fade += (anim.fadeTarget - anim.fade) * Math.min(1, dt * 7);
+  if (fadeMoving) {
+    for (const { m, base } of anim.fadeables) m.opacity = base * anim.fade;
   }
-  if (anim.alert) anim.alert.scale.setScalar(motion ? 2.6 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2.5)) : 2.8);
+  // The glow carries hover emphasis and the brief flash when a train leaves.
+  if (anim.glow) {
+    const boost = (anim.hovered ? 0.18 : 0) + 0.3 * flash;
+    (anim.glow.material as THREE.SpriteMaterial).opacity = (anim.glowBase + boost) * anim.fade;
+  }
+  if (anim.alert) anim.alert.scale.setScalar(motion ? 2.5 + 0.3 * (0.5 + 0.5 * Math.sin(t * 2.5)) : 2.7);
   anim.animate?.(t, dt, motion);
 }
 
@@ -604,22 +609,43 @@ export function disposeNode(group: THREE.Object3D) {
   (group.userData.dispose as (() => void) | undefined)?.();
 }
 
-/** A tube carrying light pulses from a node into the core. */
+/** Stream states: normal (importance-weighted), lit (focus, turquoise) or dimmed (out of focus). */
+export type StreamState = "normal" | "lit" | "dim";
+
+/** A tube carrying trains of light from a node into the core. */
 export function createStream(
   pool: ResourcePool,
   colorHex: string,
   width: number,
   rate: number,
   phase: number,
+  opacity: number,
 ): THREE.Mesh {
-  const material = pool.streamMaterial(colorHex, rate, phase);
+  const material = pool.streamMaterial(colorHex, rate, phase, opacity);
   const mesh = new THREE.Mesh(pool.tube, material);
   noPick(mesh);
   mesh.userData.width = width;
   mesh.userData.rate = rate;
   mesh.userData.phase = phase;
+  mesh.userData.opacity = opacity;
+  mesh.userData.color = colorHex;
+  mesh.userData.state = "normal";
   mesh.userData.dispose = () => pool.release(material);
   return mesh;
+}
+
+export function setStreamColor(mesh: THREE.Mesh, colorHex: string) {
+  mesh.userData.color = colorHex;
+  if (mesh.userData.state !== "lit") (mesh.material as THREE.ShaderMaterial).uniforms.uColor.value.set(colorHex);
+}
+
+export function setStreamState(mesh: THREE.Mesh, state: StreamState) {
+  if (mesh.userData.state === state) return;
+  mesh.userData.state = state;
+  const u = (mesh.material as THREE.ShaderMaterial).uniforms;
+  const base = mesh.userData.opacity as number;
+  u.uOpacity.value = state === "lit" ? Math.min(0.9, base * 2.5 + 0.35) : state === "dim" ? base * 0.25 : base;
+  u.uColor.value.set(state === "lit" ? THEME.teal : (mesh.userData.color as string));
 }
 
 /** Stretches a stream between two points, stopping at the nodes' edges. */

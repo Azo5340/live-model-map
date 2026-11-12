@@ -21,7 +21,7 @@ function dotTexture(): THREE.CanvasTexture {
   return t;
 }
 
-const PALETTE = ["#ffffff", "#bcd8ff", "#7fb2ff", "#a58cff", "#d7c9ff"].map((c) => new THREE.Color(c));
+const PALETTE = ["#DCE7FF", "#9cc0ff", "#247BFF", "#8B5CF6", "#b9a6ff"].map((c) => new THREE.Color(c));
 
 /** Random points: on a shell (stars) or gathered toward the center (dust). */
 function cloud(count: number, radius: number, centered: boolean): THREE.BufferGeometry {
@@ -58,8 +58,8 @@ export function createSpace() {
       fog: false,
     });
 
-  const stars = new THREE.Points(cloud(2200, 9000, false), material(12, 0.75));
-  const dust = new THREE.Points(cloud(1500, 1000, true), material(6, 0.5));
+  const stars = new THREE.Points(cloud(2200, 9000, false), material(10, 0.5));
+  const dust = new THREE.Points(cloud(1200, 1400, true), material(5, 0.22));
   const group = new THREE.Group();
   group.add(stars, dust);
 

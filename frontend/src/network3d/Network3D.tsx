@@ -3,7 +3,7 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo,
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { fmt, STATUS } from "../format";
+import { fmt, STATUS, THEME } from "../format";
 import type { AIModel, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
@@ -17,9 +17,10 @@ import {
   placeStream,
   pulseHead,
   ResourcePool,
-  STREAM_OPACITY,
-  STREAM_OPACITY_LIT,
+  setFocus,
   setStatus,
+  setStreamColor,
+  setStreamState,
   type NodeAnim,
 } from "./objects";
 import { createSpace } from "./space";
@@ -34,10 +35,12 @@ interface Props {
   selectedId: string | null;
   flashes: Record<string, "new" | "updated">;
   onSelect: (id: string) => void;
+  /** Back to the global view (clear the selection). */
+  onClear: () => void;
   reducedMotion: boolean;
 }
 
-const BACKGROUND = "#02030a";
+const BACKGROUND = THEME.background;
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
 const MIN_FIT_EXTENT = 900;
 const MAX_PIXEL_RATIO = 1.25;
@@ -45,6 +48,80 @@ const MAX_PIXEL_RATIO = 1.25;
 const CLICK_TOLERANCE = 6;
 /** Below this frame rate (measured over 2 s) the view steps its quality down. */
 const MIN_FPS = 40;
+
+/** Small deterministic jitter from an id, so the layout is the same on every load. */
+function hash01(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 16777619);
+  return ((h >>> 0) % 10000) / 10000;
+}
+
+/**
+ * Where each provider settles: a "galactic disc" facing the default camera.
+ * Providers follow a sunflower spiral over an annulus around the core (biggest
+ * nearest the center), with a little depth for relief. Unlike a sphere, nothing
+ * sits in front of or behind the core, so clusters stay separate on screen.
+ */
+function providerAnchors(nodes: GNode[]): Map<string, THREE.Vector3> {
+  const providers = nodes.filter((n) => n.kind === "provider").sort((a, b) => b.volume - a.volume);
+  const anchors = new Map<string, THREE.Vector3>();
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const inner = 620;
+  const outer = 620 + 120 * Math.sqrt(providers.length);
+  providers.forEach((p, i) => {
+    const r = inner + (outer - inner) * Math.sqrt((i + 0.5) / providers.length);
+    const a = i * golden;
+    const depth = (hash01(p.id) - 0.5) * 320;
+    anchors.set(p.id, new THREE.Vector3(Math.cos(a) * r, Math.sin(a) * r, depth));
+  });
+  return anchors;
+}
+
+/**
+ * Soft spatial structure (a d3 force): providers ease toward their anchor; models
+ * ease toward a point just outside their provider, so each family forms a petal
+ * pointing away from the core. Organic, not a grid: the other forces still apply.
+ */
+function clusterForce(cache: Map<string, GNode>, anchors: { current: Map<string, THREE.Vector3> }) {
+  let nodes: GNode[] = [];
+  const family = new Map<string, number>();
+  const force = (alpha: number) => {
+    for (const n of nodes) {
+      if (n.x === undefined || n.y === undefined || n.z === undefined) continue;
+      if (n.kind === "provider") {
+        const a = anchors.current.get(n.id);
+        if (!a) continue;
+        const k = 0.05 * alpha;
+        n.vx = (n.vx ?? 0) + (a.x - n.x) * k;
+        n.vy = (n.vy ?? 0) + (a.y - n.y) * k;
+        n.vz = (n.vz ?? 0) + (a.z - n.z) * k;
+      } else if (n.kind === "model") {
+        const p = cache.get(`provider:${n.provider}`);
+        if (!p || p.x === undefined || p.y === undefined || p.z === undefined) continue;
+        const len = Math.hypot(p.x, p.y, p.z) || 1;
+        const out = p.radius * 1.6 + 90 + Math.sqrt(family.get(n.provider!) ?? 1) * 22;
+        const k = 0.025 * alpha;
+        n.vx = (n.vx ?? 0) + (p.x + (p.x / len) * out - n.x) * k;
+        n.vy = (n.vy ?? 0) + (p.y + (p.y / len) * out - n.y) * k;
+        n.vz = (n.vz ?? 0) + (p.z + (p.z / len) * out - n.z) * k;
+      }
+    }
+  };
+  force.initialize = (ns: GNode[]) => {
+    nodes = ns;
+    family.clear();
+    for (const n of ns) if (n.kind === "model") family.set(n.provider!, (family.get(n.provider!) ?? 0) + 1);
+  };
+  return force;
+}
+
+// Thin connection lines: secondary ones barely visible (5-15 %), turquoise when in focus.
+const LINE = {
+  member: { color: THEME.blue, opacity: 0.07 },
+  lineage: { color: THEME.violet, opacity: 0.08 },
+  lit: { color: THEME.teal, opacity: 0.6 },
+  dim: 0.02,
+};
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -71,7 +148,7 @@ function tooltip(n: GNode): string {
 }
 
 const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
-  { models, providers, selectedId, flashes, onSelect, reducedMotion },
+  { models, providers, selectedId, flashes, onSelect, onClear, reducedMotion },
   ref,
 ) {
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -111,6 +188,22 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     [key, providerKey],
   );
 
+  // Provider anchors and direct relations, recomputed only when the structure changes.
+  const anchors = useRef(new Map<string, THREE.Vector3>());
+  anchors.current = useMemo(() => providerAnchors(graph.nodes), [graph]);
+  const neighbors = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    const add = (a: string, b: string) => map.set(a, (map.get(a) ?? new Set()).add(b));
+    for (const l of graph.links) {
+      if (l.kind === "monitor") continue; // everything talks to the core; that's not a "direct" relation
+      const a = typeof l.source === "object" ? l.source.id : l.source;
+      const b = typeof l.target === "object" ? l.target.id : l.target;
+      add(a, b);
+      add(b, a);
+    }
+    return map;
+  }, [graph]);
+
   // Every poll: refresh sizes and statuses in place, without touching the layout.
   useEffect(() => {
     buildGraph(models, providers, cache);
@@ -121,8 +214,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       setStatus(pool, anim, n.status);
     }
     for (const { mesh, link } of flows.values()) {
-      const status = cache.get(endId(link.source))?.status ?? "unknown";
-      ((mesh.material as THREE.ShaderMaterial).uniforms.uColor.value as THREE.Color).set(STATUS[status].color);
+      setStreamColor(mesh, STATUS[cache.get(endId(link.source))?.status ?? "unknown"].color);
     }
   }, [models, providers, cache, objects, flows, pool]);
 
@@ -165,8 +257,13 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     const fg = fgRef.current;
     if (!fg || size.width === 0) return;
 
-    const charge = fg.d3Force("charge") as unknown as { strength: (fn: (n: GNode) => number) => void } | undefined;
-    charge?.strength((n) => (n.kind === "engine" ? -2400 : n.kind === "provider" ? -900 : -160));
+    // Layout: providers are softly anchored on a sphere around the core (spread
+    // evenly, biggest first), and each provider's models gather on its outer side,
+    // so families read as clusters and their links don't cross the center.
+    const charge = fg.d3Force("charge") as unknown as
+      | { strength: (fn: (n: GNode) => number) => { distanceMax: (d: number) => void } }
+      | undefined;
+    charge?.strength((n) => (n.kind === "engine" ? -300 : n.kind === "provider" ? -520 : -70)).distanceMax(1400);
     const link = fg.d3Force("link") as unknown as
       | { distance: (fn: (l: GLink) => number) => { strength: (fn: (l: GLink) => number) => void } }
       | undefined;
@@ -174,20 +271,17 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       ?.distance((l) => {
         const source = cache.get(endId(l.source));
         const target = cache.get(endId(l.target));
-        if (l.kind === "monitor") return source?.kind === "model" ? 1200 : 680 + (source?.radius ?? 42) * 4;
-        if (l.kind === "member") return (source?.radius ?? 42) * 2.4 + (target?.radius ?? 18) * 3.2 + 110;
-        return 18;
+        if (l.kind === "member") return (source?.radius ?? 47) * 1.5 + (target?.radius ?? 15) * 2 + 70;
+        if (l.kind === "lineage") return 60;
+        return 1000;
       })
       .strength((l) => {
-        if (l.kind === "member") return 0.9;
-        if (l.kind === "lineage") return 0.02;
-        // Model streams barely pull, so models stay grouped around their provider.
-        return cache.get(endId(l.source))?.kind === "model" ? 0.02 : 0.5;
+        if (l.kind === "member") return 0.55;
+        if (l.kind === "lineage") return 0.01;
+        return 0; // streams to the core are drawn, not pulled: the anchor force places providers
       });
-    fg.d3Force(
-      "collide",
-      forceCollide<GNode>((n) => n.radius * (n.kind === "model" ? 2.3 : 2.1) + 40).iterations(3) as never,
-    );
+    fg.d3Force("cluster", clusterForce(cache, anchors) as never);
+    fg.d3Force("collide", forceCollide<GNode>((n) => n.radius * 1.45 + 14).iterations(3) as never);
 
     const renderer = fg.renderer() as THREE.WebGLRenderer;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
@@ -196,13 +290,14 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     // Deep-space background, star field and core dust, plus bloom so every light glows.
     const scene = fg.scene();
     scene.background = new THREE.Color(BACKGROUND);
-    scene.fog = new THREE.FogExp2(BACKGROUND, 0.00013);
+    scene.fog = new THREE.FogExp2(BACKGROUND, 0.00014);
     const space = createSpace();
     spaceRef.current = space;
     scene.add(space.group);
 
     const composer = fg.postProcessingComposer();
-    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 1.1, 0.6, 0.6);
+    // Gentle bloom: only the brightest highlights glow; logos and the core stay legible.
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.7, 0.5, 0.72);
     composer.addPass(bloom);
     bloomRef.current = bloom;
     composerRef.current = composer;
@@ -317,11 +412,10 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     if (!fg || node.x === undefined) return;
     fitted.current = true; // the user picked a view: no automatic re-framing after this
     const target = new THREE.Vector3(node.x, node.y ?? 0, node.z ?? 0);
-    // Look at the node from outside the network, a little above, so the core
-    // isn't right behind it.
-    const dir = target.lengthSq() > 1 ? target.clone().normalize() : new THREE.Vector3(0, 0, 1);
-    dir.add(new THREE.Vector3(0, 0.45, 0)).normalize();
-    const distance = node.kind === "engine" ? 260 : 110 + node.radius * 12;
+    // The layout is a disc facing the default camera: approach from the front so
+    // the cluster keeps its context and labels sit under their logos.
+    const dir = new THREE.Vector3(0, 0, 1);
+    const distance = node.kind === "engine" ? 900 : 260 + node.radius * 14;
     const pos = target.clone().addScaledVector(dir, distance);
     fg.cameraPosition({ x: pos.x, y: pos.y, z: pos.z }, { x: target.x, y: target.y, z: target.z }, ms);
   }, []);
@@ -348,8 +442,10 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     return true;
   }, []);
 
+  // Back to the global view: clear the focus and frame the whole network.
   const resetCamera = useCallback(() => {
     fitted.current = true;
+    onClearRef.current();
     frame(1000);
   }, [frame]);
 
@@ -396,23 +492,33 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const end = useCallback((x: string | GNode) => (typeof x === "object" ? x : cache.get(x)), [cache]);
   const endId = (x: string | GNode) => (typeof x === "object" ? x.id : x);
 
-  // The hovered and the selected node's streams get brighter: uniform changes only.
+  // Focus: the hovered node (or else the selected one) and its direct relations stay
+  // bright, their links turn turquoise, everything else fades. Only material and
+  // uniform changes: no React render, no graph re-processing.
   const selectedRef = useRef(selectedId);
   selectedRef.current = selectedId;
-  const lit = useRef(new Set<string>()).current;
+  const lines = useRef(new Map<string, { m: THREE.LineBasicMaterial; link: GLink }>()).current;
   const refreshHighlight = useCallback(() => {
-    const ids = new Set([hoveredRef.current?.id, selectedRef.current].filter(Boolean) as string[]);
-    // A selected provider lights up its whole family.
-    const provider = selectedRef.current?.startsWith("provider:") ? selectedRef.current.slice(9) : null;
-    if (provider) for (const n of cache.values()) if (n.kind === "model" && n.provider === provider) ids.add(n.id);
-    for (const [key, { mesh, link }] of flows) {
-      const on = ids.has(endId(link.source));
-      if (on === lit.has(key)) continue;
-      if (on) lit.add(key);
-      else lit.delete(key);
-      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = on ? STREAM_OPACITY_LIT : STREAM_OPACITY;
+    const focusId = hoveredRef.current?.id ?? selectedRef.current;
+    const active = !!focusId && focusId !== ENGINE_ID && cache.has(focusId);
+    const related = new Set<string>(active ? [focusId!, ...(neighbors.get(focusId!) ?? [])] : []);
+    for (const [id, group] of objects) {
+      const anim = group.userData.anim as NodeAnim;
+      if (id === ENGINE_ID) continue;
+      setFocus(anim, !active || related.has(id), active && related.has(id));
     }
-  }, [flows, lit, cache]);
+    for (const { mesh, link } of flows.values()) {
+      setStreamState(mesh, !active ? "normal" : related.has(endId(link.source)) ? "lit" : "dim");
+    }
+    for (const { m, link } of lines.values()) {
+      const a = endId(link.source);
+      const b = endId(link.target);
+      const lit = active && (a === focusId || b === focusId);
+      const style = lit ? LINE.lit : LINE[link.kind === "lineage" ? "lineage" : "member"];
+      m.color.set(style.color);
+      m.opacity = lit ? LINE.lit.opacity : active ? LINE.dim : style.opacity;
+    }
+  }, [flows, lines, objects, cache, neighbors]);
   useEffect(refreshHighlight, [selectedId, refreshHighlight]);
 
   const onHover = useCallback(
@@ -438,8 +544,33 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   // prop like nodeVal or linkColor makes the library re-process every node or link.
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const onClearRef = useRef(onClear);
+  onClearRef.current = onClear;
   const nodeVal = useCallback((n: GNode) => n.radius, []);
-  const linkColor = useCallback((l: GLink) => (l.kind === "lineage" ? "#b08cff" : "#4c7dff"), []);
+  // One material per line (cached by link id) so focus can light or dim each line in place.
+  const linkMaterial = useCallback(
+    (l: GLink) => {
+      if (l.kind === "monitor") return null as unknown as THREE.Material;
+      const cached = lines.get(l.id);
+      if (cached) {
+        cached.link = l;
+        return cached.m;
+      }
+      const style = LINE[l.kind === "lineage" ? "lineage" : "member"];
+      const m = pool.own(
+        new THREE.LineBasicMaterial({
+          color: style.color,
+          transparent: true,
+          opacity: style.opacity,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        }),
+      );
+      lines.set(l.id, { m, link: l });
+      return m;
+    },
+    [lines, pool],
+  );
   const onClick = useCallback(
     (n: GNode) => {
       // Models and providers open their details panel (and the camera flies to them).
@@ -456,16 +587,20 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    let down: { x: number; y: number } | null = null;
+    // The node under the pointer is captured on press: as soon as the mouse moves
+    // while pressed, the library treats it as a camera drag and reports "no hover",
+    // so reading the hover on release would mistake a shaky click for empty space.
+    let down: { x: number; y: number; node: GNode | null } | null = null;
     const onDown = (e: PointerEvent) => {
-      if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+      if (e.button === 0) down = { x: e.clientX, y: e.clientY, node: hoveredRef.current };
     };
     const onUp = (e: PointerEvent) => {
       if (!down || e.button !== 0) return;
-      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      const { x, y, node } = down;
       down = null;
-      const node = hoveredRef.current;
-      if (moved <= CLICK_TOLERANCE && node) onClick(node);
+      if (Math.hypot(e.clientX - x, e.clientY - y) > CLICK_TOLERANCE) return;
+      if (node) onClick(node);
+      else onClearRef.current(); // a click in empty space returns to the global view
     };
     el.addEventListener("pointerdown", onDown);
     el.addEventListener("pointerup", onUp);
@@ -486,9 +621,12 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
       const status = end(l.source)?.status ?? "unknown";
       const provider = end(l.source)?.kind === "provider";
-      const width = provider ? 0.4 + 0.8 * l.activity : 0.12 + 0.28 * l.activity;
+      // Importance shows in width and brightness: provider streams are the main
+      // connections, model streams stay faint (5-15 %) until they're in focus.
+      const width = provider ? 0.5 + 0.9 * l.activity : 0.15 + 0.25 * l.activity;
       const rate = provider ? 0.1 + 0.16 * l.activity : 0.05 + 0.11 * l.activity; // trains per second
-      const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random());
+      const opacity = provider ? 0.22 + 0.22 * l.activity : 0.05 + 0.1 * l.activity;
+      const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random(), opacity);
       const old = flows.get(l.id);
       if (old) (old.mesh.userData.dispose as () => void)();
       flows.set(l.id, { mesh, link: l, head: 0 });
@@ -529,8 +667,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           linkTarget="target"
           linkThreeObject={makeLink}
           linkPositionUpdate={positionLink}
-          linkColor={linkColor}
-          linkOpacity={0.3}
+          linkMaterial={linkMaterial}
           linkWidth={0}
           d3AlphaDecay={0.025}
           d3VelocityDecay={0.38}

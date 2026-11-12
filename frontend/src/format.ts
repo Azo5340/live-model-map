@@ -1,11 +1,22 @@
 import type { AIModel, Metrics, ModelStatus } from "./types";
 
+/** Reference palette: deep navy, electric blue, violet, turquoise for interactions. */
+export const THEME = {
+  background: "#080D1C",
+  blue: "#247BFF",
+  violet: "#8B5CF6",
+  teal: "#40DACC",
+  text: "#DCE7FF",
+} as const;
+
+// Calm, consistent saturation: blue/violet for the normal states, warm tones only
+// where something needs attention.
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
-  operational: { color: "#5aa9ff", label: "Operational" },
-  degraded: { color: "#ffb454", label: "Degraded" },
-  down: { color: "#ff5c7a", label: "Down" },
-  security_incident: { color: "#e06bff", label: "Security incident" },
-  unknown: { color: "#8b7cf6", label: "Unknown" },
+  operational: { color: THEME.blue, label: "Operational" },
+  degraded: { color: "#E5AE4F", label: "Degraded" },
+  down: { color: "#EC5A72", label: "Down" },
+  security_incident: { color: "#E06BD8", label: "Security incident" },
+  unknown: { color: THEME.violet, label: "Unknown" },
 };
 
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";

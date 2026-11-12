@@ -15,11 +15,16 @@ export interface GNode {
   volume: number;
   modelCount?: number;
   status: ModelStatus;
+  /** Visual hierarchy: 0 = main, 1 = secondary, 2 = minor (by real download rank within its kind). */
+  tier: Tier;
   radius: number;
   // Filled in by the force simulation.
   x?: number;
   y?: number;
   z?: number;
+  vx?: number;
+  vy?: number;
+  vz?: number;
   fx?: number;
   fy?: number;
   fz?: number;
@@ -35,19 +40,26 @@ export interface GLink {
 }
 
 export const ENGINE_ID = "__engine__";
-export const ENGINE_RADIUS = 72;
+export const ENGINE_RADIUS = 56;
 
-// Radius grows with the cube root of volume (so the sphere's *volume* is
-// proportional to downloads), clamped so small nodes stay visible.
-const SIZES: Record<"provider" | "model", { min: number; max: number }> = {
-  provider: { min: 42, max: 92 },
-  model: { min: 18, max: 40 },
+export type Tier = 0 | 1 | 2;
+
+// Three sizes per kind instead of a continuous scale, so the hierarchy reads at a
+// glance; the smallest provider size still keeps logos recognisable.
+export const TIER_RADIUS: Record<"provider" | "model", [number, number, number]> = {
+  provider: [64, 47, 34],
+  model: [22, 15, 10],
 };
 
-export function radiusFor(kind: "provider" | "model", volume: number, maxVolume: number): number {
-  const { min, max } = SIZES[kind];
-  if (maxVolume <= 0 || volume <= 0) return min;
-  return min + (max - min) * (Math.cbrt(volume) / Math.cbrt(maxVolume));
+/** Main = top 15 % by downloads, secondary = next 35 %, minor = the rest. */
+function tiers(volumes: Map<string, number>): Map<string, Tier> {
+  const ranked = [...volumes.entries()].sort((a, b) => b[1] - a[1]);
+  const out = new Map<string, Tier>();
+  ranked.forEach(([id, v], i) => {
+    const f = ranked.length > 1 ? i / (ranked.length - 1) : 0;
+    out.set(id, v <= 0 ? 2 : f < 0.15 ? 0 : f < 0.5 ? 1 : 2);
+  });
+  return out;
 }
 
 // Worst status first: a provider takes the most severe status among its models.
@@ -100,6 +112,7 @@ export function buildGraph(
     name: "LIVE ANALYSIS CORE",
     volume: 0,
     status: "operational",
+    tier: 0,
     radius: ENGINE_RADIUS,
     fx: 0,
     fy: 0,
@@ -111,6 +124,8 @@ export function buildGraph(
   const providerVolumes = [...byProvider.values()].map((ms) => ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0));
   const maxProviderVolume = Math.max(0, ...providerVolumes);
   const maxModelVolume = Math.max(0, ...[...models.values()].map((m) => volumeOf(m) ?? 0));
+  const providerTier = tiers(new Map([...byProvider].map(([p, ms]) => [p, ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0)])));
+  const modelTier = tiers(new Map([...models.values()].map((m) => [m.id, volumeOf(m) ?? 0])));
 
   for (const [provider, ms] of byProvider) {
     const pid = `provider:${provider}`;
@@ -125,7 +140,8 @@ export function buildGraph(
         volume,
         modelCount: ms.length,
         status: worst(ms.map(statusOf)),
-        radius: radiusFor("provider", volume, maxProviderVolume),
+        tier: providerTier.get(provider) ?? 2,
+        radius: TIER_RADIUS.provider[providerTier.get(provider) ?? 2],
       }),
     );
     links.push({
@@ -147,7 +163,8 @@ export function buildGraph(
           model: m,
           volume: volumeM,
           status: statusOf(m),
-          radius: radiusFor("model", volumeM, maxModelVolume),
+          tier: modelTier.get(m.id) ?? 2,
+          radius: TIER_RADIUS.model[modelTier.get(m.id) ?? 2],
         }),
       );
       links.push({ id: `${pid}->${m.id}`, kind: "member", source: pid, target: m.id, activity: 0 });

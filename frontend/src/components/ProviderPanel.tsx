@@ -36,7 +36,7 @@ export default function ProviderPanel({
   const avatar = providers[provider]?.avatar;
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-[#070a17] md:w-[380px]">
+    <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-[#0C1328] md:w-[380px]">
       <header className="flex items-center gap-3 border-b border-white/5 p-4">
         {avatar ? (
           <img src={avatar} alt="" className="h-11 w-11 shrink-0 rounded-full bg-white object-cover" />

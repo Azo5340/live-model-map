@@ -42,27 +42,30 @@ live-model-map/
 
 `frontend/src/network3d/` — react-force-graph-3d + Three.js, lazy-loaded:
 
-- **Central "Live Analysis Core"**: the check-up that collects and analyses the data.
-- **Providers** around the core: glass spheres with the organization's Hugging Face logo inside
-  (initials when it has none). Halo = worst status among its models.
-- **Models** orbit their provider, colored by status; violet links = real lineage (`base_model`).
-- **Volume**: radius ∝ cube root of downloads/day (so the sphere's volume is proportional to the
-  real volume), clamped to a min and max, with animated size changes.
-- **Light trains**: every provider *and* every model is linked to the core by a stream on which a
-  short train of light (a bright headlight followed by a few cars) rolls into the center. Train
-  rate and stream width follow the real download volume (log scale), the color follows the status.
-  No traffic between models is made up.
-- **Fluid nodes**: models are large luminous orbs and providers show their logo inside a glowing
-  status ring; nodes breathe gently, wobble like a drop when a train leaves, and are drawn toward
-  the core while it travels, springing back as it arrives.
-- **Bright core**: a white starburst core that gains energy and sends out ripples as pulses
-  arrive, so it shines more when there is more activity.
-- **Style**: deep-space background with a star field and glowing dust around the core, thin
-  luminous filaments, selective bloom (only the brightest points glow, logos stay readable),
-  a blue/violet palette where degraded, down and security incidents stand out, Inter for text.
-- Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
-  rotate / zoom / pan, a wide airy layout framed to fill the view, hover tooltips, forgiving clicks (a
-  few pixels of mouse movement still count as a click; nodes can't be dragged by accident), click (details panel + camera fly-to), "Reset view".
+- **Central "Live Analysis Core"**: the check-up that collects and analyses the data — a diffuse
+  electric-blue glow (no pure white), bright enough to be the focal point without washing out the
+  center; it gains energy and sends out ripples as trains of light arrive.
+- **Layout**: a "galactic disc" facing the camera. Providers are softly anchored on a sunflower
+  spiral around the core (biggest nearest the center, a little depth for relief), and each family
+  of models gathers on the outer side of its provider, so clusters stay separate and their links
+  don't cross the center. Organic, not a grid: repulsion, links and collisions still shape it.
+- **Hierarchy**: three sizes per kind — main (top 15 % by downloads), secondary (next 35 %), minor
+  (the rest) — with glow strength following the same tiers. Providers show their Hugging Face logo
+  filling a disc (centered, undistorted, initials when there is none) inside a status ring; minor
+  providers only show their name when in focus. Models are soft orbs colored by status.
+- **Connections**: every provider and model has a stream to the core on which short trains of
+  light roll in; provider streams are the main connections, model streams stay faint (5–15 %),
+  provider → model and lineage lines are hairlines (7 % and 8 %). No relation is ever removed, only
+  dimmed; nothing between models is made up.
+- **Focus**: hovering a node enlarges and brightens it, turns its direct relations' links
+  turquoise and dims everything else; clicking keeps that focus and opens its panel (model or
+  provider). Esc, a click in empty space or "Reset view" returns to the global view.
+- **Palette**: background `#080D1C`, electric blue `#247BFF`, violet `#8B5CF6`, turquoise
+  `#40DACC` for interactions, `#DCE7FF` for text; warm tones only for degraded, down and
+  security incidents. Gentle bloom (only highlights glow), light fog for depth, a faint star field.
+- **Motion**: nodes breathe and wobble slightly when a train leaves and lean toward the core while
+  it travels. Rotate / zoom / pan; clicks tolerate a few pixels of mouse movement and nodes can't
+  be dragged by accident.
 - Performance: shared textures and materials disposed on unmount, one animation loop, capped
   pixel ratio, rendering paused while the tab is hidden. Hover is handled outside React and every
   callback given to the graph is stable, so moving the camera never makes the library re-process

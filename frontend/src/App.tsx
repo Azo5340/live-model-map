@@ -79,6 +79,16 @@ export default function App() {
     setSelectedId(id);
     setSidebarOpen(false);
   }, []);
+  const clearSelection = useCallback(() => setSelectedId(null), []);
+
+  // Escape returns to the global view.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const statusCounts = useMemo(() => {
     const counts = Object.fromEntries(Object.keys(STATUS).map((k) => [k, 0])) as Record<ModelStatus, number>;
@@ -97,7 +107,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-white/5 bg-[#04060f] px-4 py-2.5">
+      <header className="flex items-center gap-3 border-b border-white/5 bg-[#080D1C] px-4 py-2.5">
         <button
           className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2 py-0.5 text-sm text-slate-300 sm:hidden"
           onClick={() => setSidebarOpen((v) => !v)}
@@ -133,7 +143,7 @@ export default function App() {
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
-          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#070a17] sm:static sm:flex sm:w-56 lg:w-72`}
+          } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#0C1328] sm:static sm:flex sm:w-56 lg:w-72`}
         >
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
@@ -165,6 +175,7 @@ export default function App() {
                 selectedId={selectedId}
                 flashes={flashes}
                 onSelect={select}
+                onClear={clearSelection}
                 reducedMotion={reducedMotion}
               />
             </Suspense>
@@ -178,7 +189,7 @@ export default function App() {
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
-            <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#070a17]/90 px-3 py-2 text-xs sm:block">
+            <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-2 text-xs sm:block">
               {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: STATUS[k].color }} />
@@ -187,13 +198,13 @@ export default function App() {
                 </div>
               ))}
               <div className="mt-1 max-w-[13rem] border-t border-slate-800 pt-1 leading-snug text-slate-500">
-                Volume ∝ downloads/day (radius ∝ cube root). Trains of light roll into the core; their rate and width follow that volume.
+                Size: main, secondary, minor (by downloads). Streams: trains of light into the core, brighter for bigger nodes.
               </div>
             </div>
             {webgl && (
               <button
                 onClick={() => network.current?.resetCamera()}
-                className="pointer-events-auto rounded-lg border border-white/5 bg-[#070a17]/90 px-3 py-1.5 text-xs text-slate-300 hover:border-white/15 hover:text-slate-100"
+                className="pointer-events-auto rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-1.5 text-xs text-slate-300 hover:border-white/15 hover:text-slate-100"
               >
                 Reset view
               </button>
@@ -213,7 +224,7 @@ export default function App() {
           )}
           {webgl && (
             <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
-              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a model or a logo: details
+              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a node: focus · Esc or click empty space: global view
             </p>
           )}
         </main>
