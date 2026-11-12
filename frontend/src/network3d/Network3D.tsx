@@ -1,5 +1,5 @@
 import { forceCollide } from "d3-force-3d";
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
@@ -40,6 +40,9 @@ interface Props {
 const BACKGROUND = "#02030a";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
 const MIN_FIT_EXTENT = 900;
+const MAX_PIXEL_RATIO = 1.25;
+/** Below this frame rate (measured over 2 s) the view steps its quality down. */
+const MIN_FPS = 40;
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
@@ -72,7 +75,9 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const [hovered, setHovered] = useState<GNode | null>(null);
+  // Hover is tracked in a ref, not state: re-rendering on every hover made the graph
+  // re-process all nodes and links, which is what made camera moves stutter.
+  const hoveredRef = useRef<GNode | null>(null);
   // 3D labels are drawn into canvases once, so wait for Inter (max 2 s) before building the scene.
   const [fontReady, setFontReady] = useState(false);
   useEffect(() => {
@@ -87,6 +92,11 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const flows = useRef(new Map<string, { mesh: THREE.Mesh; link: GLink; head: number }>()).current;
   const fitted = useRef(false);
   const spaceRef = useRef<ReturnType<typeof createSpace> | null>(null);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const bloomRef = useRef<UnrealBloomPass | null>(null);
+  const composerRef = useRef<{ setPixelRatio: (r: number) => void } | null>(null);
+  // Adaptive quality: 0 = full; each step down trades looks for frame rate on slower machines.
+  const quality = useRef(0);
   const motion = !reducedMotion;
 
   // Rebuild the graph only when nodes/links appear or disappear; node objects
@@ -178,7 +188,8 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     );
 
     const renderer = fg.renderer() as THREE.WebGLRenderer;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+    rendererRef.current = renderer;
 
     // Deep-space background, star field and core dust, plus bloom so every light glows.
     const scene = fg.scene();
@@ -191,6 +202,9 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     const composer = fg.postProcessingComposer();
     const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 1.1, 0.6, 0.6);
     composer.addPass(bloom);
+    bloomRef.current = bloom;
+    composerRef.current = composer;
+    quality.current = 0;
 
     return () => {
       scene.remove(space.group);
@@ -206,9 +220,35 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
+    let frames = 0;
+    let windowStart = performance.now();
+    let slowWindows = 0;
+    const stepQualityDown = () => {
+      const level = ++quality.current;
+      if (level === 1) {
+        rendererRef.current?.setPixelRatio(1);
+        composerRef.current?.setPixelRatio(1);
+      } else if (level === 2 && bloomRef.current) {
+        bloomRef.current.enabled = false;
+      } else if (level === 3 && spaceRef.current) {
+        spaceRef.current.group.visible = false;
+      }
+    };
     const loop = (now: number) => {
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
+      // Measure the frame rate every 2 s; two slow windows in a row lower the quality one step.
+      frames++;
+      if (now - windowStart > 2000) {
+        const fps = (frames * 1000) / (now - windowStart);
+        slowWindows = fps < MIN_FPS && !document.hidden ? slowWindows + 1 : 0;
+        if (slowWindows >= 2 && quality.current < 3) {
+          stepQualityDown();
+          slowWindows = 0;
+        }
+        frames = 0;
+        windowStart = now;
+      }
       const t = now / 1000;
       if (motion) {
         pool.time.value = t;
@@ -350,37 +390,73 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     if (node) focus(node);
   }, [selectedId, cache, focus]);
 
-  // Hover state on the node objects, plus the pointer cursor.
-  useEffect(() => {
-    for (const group of objects.values()) {
-      (group.userData.anim as NodeAnim).hovered = false;
-    }
-    if (hovered) {
-      const anim = objects.get(hovered.id)?.userData.anim as NodeAnim | undefined;
-      if (anim) anim.hovered = true;
-    }
-    if (containerRef.current) containerRef.current.style.cursor = hovered ? "pointer" : "grab";
-  }, [hovered, objects]);
-
   // Link ends are ids until the simulation swaps in the node objects.
   const end = useCallback((x: string | GNode) => (typeof x === "object" ? x : cache.get(x)), [cache]);
   const endId = (x: string | GNode) => (typeof x === "object" ? x.id : x);
 
-  const isLit = useCallback(
-    (l: GLink) => {
-      if (!hovered && !selectedId) return false;
-      const ids = [endId(l.source), endId(l.target)];
-      return (hovered && ids.includes(hovered.id)) || (selectedId !== null && ids.includes(selectedId));
+  // The hovered and the selected node's streams get brighter: uniform changes only.
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
+  const lit = useRef(new Set<string>()).current;
+  const refreshHighlight = useCallback(() => {
+    const ids = new Set([hoveredRef.current?.id, selectedRef.current].filter(Boolean) as string[]);
+    for (const [key, { mesh, link }] of flows) {
+      const on = ids.has(endId(link.source));
+      if (on === lit.has(key)) continue;
+      if (on) lit.add(key);
+      else lit.delete(key);
+      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = on ? STREAM_OPACITY_LIT : STREAM_OPACITY;
+    }
+  }, [flows, lit]);
+  useEffect(refreshHighlight, [selectedId, refreshHighlight]);
+
+  const onHover = useCallback(
+    (n: GNode | null) => {
+      const before = hoveredRef.current;
+      if (before === n) return;
+      if (before) {
+        const anim = objects.get(before.id)?.userData.anim as NodeAnim | undefined;
+        if (anim) anim.hovered = false;
+      }
+      if (n) {
+        const anim = objects.get(n.id)?.userData.anim as NodeAnim | undefined;
+        if (anim) anim.hovered = true;
+      }
+      hoveredRef.current = n;
+      if (containerRef.current) containerRef.current.style.cursor = n ? "pointer" : "grab";
+      refreshHighlight();
     },
-    [hovered, selectedId],
+    [objects, refreshHighlight],
   );
 
-  // Hovered or selected links get brighter (a uniform change, no rebuild).
-  useEffect(() => {
-    for (const { mesh, link } of flows.values()) {
-      (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = isLit(link) ? STREAM_OPACITY_LIT : STREAM_OPACITY;
+  // Every callback handed to the graph keeps a stable identity: a new function on a
+  // prop like nodeVal or linkColor makes the library re-process every node or link.
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
+  const nodeVal = useCallback((n: GNode) => n.radius, []);
+  const linkColor = useCallback((l: GLink) => (l.kind === "lineage" ? "#b08cff" : "#4c7dff"), []);
+  const onClick = useCallback(
+    (n: GNode) => {
+      if (n.kind === "model") onSelectRef.current(n.id);
+      else if (n.kind === "engine") resetCamera();
+      else focus(n);
+    },
+    [resetCamera, focus],
+  );
+  const onDrag = useCallback(() => {
+    fitted.current = true;
+  }, []);
+  const onDragEnd = useCallback((n: GNode) => {
+    // Let dragged nodes settle back into the layout instead of pinning them.
+    if (n.kind !== "engine") {
+      n.fx = undefined;
+      n.fy = undefined;
+      n.fz = undefined;
     }
-  }, [isLit, flows]);
+  }, []);
+  const onEngineStop = useCallback(() => {
+    if (!fitted.current && fitWhenSpread(900)) fitted.current = true;
+  }, [fitWhenSpread]);
 
   // Every node → core link is a stream of light pulses (thicker and faster for busier
   // nodes, providers more than models); the other links stay thin lines.
@@ -426,42 +502,28 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           controlType="orbit"
           nodeThreeObject={makeObject}
           nodeLabel={tooltip}
-          nodeVal={(n) => n.radius}
-          onNodeHover={(n) => setHovered(n ?? null)}
-          onNodeClick={(n) => {
-            if (n.kind === "model") onSelect(n.id);
-            else if (n.kind === "engine") resetCamera();
-            else focus(n);
-          }}
-          onNodeDragEnd={(n) => {
-            // Let dragged nodes settle back into the layout instead of pinning them.
-            if (n.kind !== "engine") {
-              n.fx = undefined;
-              n.fy = undefined;
-              n.fz = undefined;
-            }
-          }}
+          nodeVal={nodeVal}
+          onNodeHover={onHover}
+          onNodeClick={onClick}
+          onNodeDragEnd={onDragEnd}
           linkSource="source"
           linkTarget="target"
           linkThreeObject={makeLink}
           linkPositionUpdate={positionLink}
-          linkColor={(l) => (isLit(l) ? "#e4eeff" : l.kind === "lineage" ? "#b08cff" : "#4c7dff")}
+          linkColor={linkColor}
           linkOpacity={0.3}
           linkWidth={0}
           d3AlphaDecay={0.025}
           d3VelocityDecay={0.38}
           warmupTicks={60}
           cooldownTicks={250}
-          onEngineStop={() => {
-            if (!fitted.current && fitWhenSpread(900)) fitted.current = true;
-          }}
-          onNodeDrag={() => {
-            fitted.current = true;
-          }}
+          onEngineStop={onEngineStop}
+          onNodeDrag={onDrag}
         />
       )}
     </div>
   );
 });
 
-export default Network3D;
+// Memoized: the page re-renders every 30 s for its "x min ago" labels; the 3D view needn't.
+export default memo(Network3D);

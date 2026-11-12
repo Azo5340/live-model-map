@@ -44,6 +44,11 @@ export interface NodeAnim {
 }
 
 const TEX = 256; // canvas size for badge textures
+
+/** Decorative objects (glows, rings, labels, streams) are skipped by mouse picking, which only tests node badges. */
+function noPick<T extends THREE.Object3D>(...objects: T[]): void {
+  for (const o of objects) o.raycast = () => {};
+}
 const UP = new THREE.Vector3(0, 1, 0);
 
 function canvas2d() {
@@ -116,7 +121,7 @@ export function pulseHead(t: number, rate: number, phase: number): number {
 
 export class ResourcePool {
   /** Open tube along +Y, unit height and radius; scaled per link. */
-  readonly tube = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true);
+  readonly tube = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
   /** Shared by every stream material so one update per frame animates all of them. */
   readonly time = { value: 0 };
   readonly glow: THREE.CanvasTexture;
@@ -384,6 +389,7 @@ function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim
 function alertRing(pool: ResourcePool) {
   const s = new THREE.Sprite(pool.ring(STATUS.security_incident.color, 10, 0.8));
   s.scale.setScalar(2.8);
+  noPick(s);
   return s;
 }
 
@@ -399,9 +405,9 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
   group.add(body);
 
   const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#4f8dff", 0.6)));
-  halo.scale.setScalar(9);
+  halo.scale.setScalar(6);
   const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#8f6bff", 0.18)));
-  nebula.scale.setScalar(14);
+  nebula.scale.setScalar(8.5);
   const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#bfe3ff", 0.9)));
   aura.scale.setScalar(3.6);
   const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#d6ecff", 0.55)));
@@ -425,6 +431,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     return r;
   });
 
+  noPick(nebula, halo, rays, rays2, aura, edge, inner, label, ...ripples);
   body.add(nebula, halo, rays, rays2, aura, edge, inner, heart, label, ...ripples);
 
   const anim = baseAnim("engine", node, body);
@@ -448,8 +455,8 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     (aura.material as THREE.SpriteMaterial).opacity = 0.4 + 0.3 * energy;
     (rays.material as THREE.SpriteMaterial).opacity = 0.25 + 0.3 * energy;
     heart.scale.setScalar(1.4 + 0.45 * energy + 0.06 * breathe);
-    halo.scale.setScalar(7 + 1.5 * energy + 0.3 * breathe);
-    rays.scale.setScalar(6.5 + 2 * energy);
+    halo.scale.setScalar(5 + 1.2 * energy + 0.2 * breathe);
+    rays.scale.setScalar(5.5 + 1.5 * energy);
     if (motion) {
       (rays.material as THREE.SpriteMaterial).rotation = t * 0.05;
       (rays2.material as THREE.SpriteMaterial).rotation = -t * 0.08;
@@ -478,7 +485,7 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
 
   const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.provider));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3.6);
+  glow.scale.setScalar(3);
   const logoMaterial = pool.own(spriteMaterial(pool.logo(node.name, node.avatar), 1, true));
   logoMaterial.color.set("#9aa7c9"); // dimmed below the bloom threshold so logos stay readable
   const logo = new THREE.Sprite(logoMaterial);
@@ -487,6 +494,7 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   ring.scale.setScalar(2.35);
   const label = pool.label(node.name, 0.3, "#c3cee6");
   label.position.y = -1.7;
+  noPick(glow, ring, label);
   body.add(glow, logo, ring, label);
 
   const anim = baseAnim("provider", node, body);
@@ -510,9 +518,10 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   group.add(body);
   const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), BASE_GLOW.model));
   const glow = new THREE.Sprite(glowMat);
-  glow.scale.setScalar(3.6);
+  glow.scale.setScalar(3);
   const disc = new THREE.Sprite(pool.orb(color(node.status)));
   disc.scale.setScalar(2.4);
+  noPick(glow);
   body.add(glow, disc);
   const anim = baseAnim("model", node, body);
   anim.disc = disc;
@@ -600,6 +609,7 @@ export function createStream(
 ): THREE.Mesh {
   const material = pool.streamMaterial(colorHex, rate, phase);
   const mesh = new THREE.Mesh(pool.tube, material);
+  noPick(mesh);
   mesh.userData.width = width;
   mesh.userData.rate = rate;
   mesh.userData.phase = phase;

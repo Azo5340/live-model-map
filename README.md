@@ -62,9 +62,13 @@ live-model-map/
   a blue/violet palette where degraded, down and security incidents stand out, Inter for text.
 - Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
   rotate / zoom / pan, a wide airy layout framed to fill the view, hover tooltips, click (details panel + camera fly-to), "Reset view".
-- Performance: shared geometries, materials and textures disposed on unmount, a single animation
-  loop, capped pixel ratio, rendering paused while the tab is hidden. With the OS "reduce motion"
-  setting the float, wobble, pulses and ripples stand still.
+- Performance: shared textures and materials disposed on unmount, one animation loop, capped
+  pixel ratio, rendering paused while the tab is hidden. Hover is handled outside React and every
+  callback given to the graph is stable, so moving the camera never makes the library re-process
+  all nodes and links; decorative objects (glows, rings, labels, streams) are skipped by mouse
+  picking. An adaptive quality step lowers the pixel ratio, then bloom, then the star field when
+  the frame rate stays under 40 fps. With the OS "reduce motion" setting the float, wobble,
+  trains and ripples stand still.
 - Without WebGL a notice explains it; the lists and the details panel still work.
 
 ### Statuses (node color)
