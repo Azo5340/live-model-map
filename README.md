@@ -61,7 +61,8 @@ live-model-map/
   luminous filaments, selective bloom (only the brightest points glow, logos stay readable),
   a blue/violet palette where degraded, down and security incidents stand out, Inter for text.
 - Soft physics (forces, collision avoidance, fixed core), gentle idle float, drag and drop,
-  rotate / zoom / pan, a wide airy layout framed to fill the view, hover tooltips, click (details panel + camera fly-to), "Reset view".
+  rotate / zoom / pan, a wide airy layout framed to fill the view, hover tooltips, forgiving clicks (a
+  few pixels of mouse movement still count as a click; nodes can't be dragged by accident), click (details panel + camera fly-to), "Reset view".
 - Performance: shared textures and materials disposed on unmount, one animation loop, capped
   pixel ratio, rendering paused while the tab is hidden. Hover is handled outside React and every
   callback given to the graph is stable, so moving the camera never makes the library re-process
@@ -88,7 +89,8 @@ live-model-map/
   to normal.
 - **Feed**: every new model and every status or price change.
 - **Check-ups**: the history of check-up passes (duration, new models, errors).
-- Clicking a model shows its details (only the metrics our sources provide) and compares it with
+- Clicking a provider logo opens the provider panel (status, totals, its models, its streams lit
+  up). Clicking a model shows its details (only the metrics our sources provide) and compares it with
   its parent or any other model.
 
 ### Metrics

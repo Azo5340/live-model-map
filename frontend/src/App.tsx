@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Snapshot } from "./api";
 import CheckupLog from "./components/CheckupLog";
 import EventFeed from "./components/EventFeed";
+import ProviderPanel from "./components/ProviderPanel";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
 import { ago, STATUS, statusOf } from "./format";
@@ -73,6 +74,7 @@ export default function App() {
   }, []);
 
   const selected = selectedId ? models.get(selectedId) : undefined;
+  const selectedProvider = selectedId?.startsWith("provider:") ? selectedId.slice("provider:".length) : null;
   const select = useCallback((id: string) => {
     setSelectedId(id);
     setSidebarOpen(false);
@@ -211,7 +213,7 @@ export default function App() {
           )}
           {webgl && (
             <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
-              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a model: details
+              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a model or a logo: details
             </p>
           )}
         </main>
@@ -219,6 +221,17 @@ export default function App() {
         {selected && (
           <div className="absolute inset-0 z-20 md:static md:inset-auto">
             <SidePanel model={selected} models={models} onClose={() => setSelectedId(null)} />
+          </div>
+        )}
+        {selectedProvider && (
+          <div className="absolute inset-0 z-20 md:static md:inset-auto">
+            <ProviderPanel
+              provider={selectedProvider}
+              models={models}
+              providers={providers}
+              onSelect={select}
+              onClose={() => setSelectedId(null)}
+            />
           </div>
         )}
       </div>

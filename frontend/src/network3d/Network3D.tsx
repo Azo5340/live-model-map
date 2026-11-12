@@ -41,6 +41,8 @@ const BACKGROUND = "#02030a";
 /** Smallest network size (scene units) worth framing; below it the layout hasn't spread yet. */
 const MIN_FIT_EXTENT = 900;
 const MAX_PIXEL_RATIO = 1.25;
+/** A press and release this close together (px) is a click, not a camera drag. */
+const CLICK_TOLERANCE = 6;
 /** Below this frame rate (measured over 2 s) the view steps its quality down. */
 const MIN_FPS = 40;
 
@@ -400,6 +402,9 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const lit = useRef(new Set<string>()).current;
   const refreshHighlight = useCallback(() => {
     const ids = new Set([hoveredRef.current?.id, selectedRef.current].filter(Boolean) as string[]);
+    // A selected provider lights up its whole family.
+    const provider = selectedRef.current?.startsWith("provider:") ? selectedRef.current.slice(9) : null;
+    if (provider) for (const n of cache.values()) if (n.kind === "model" && n.provider === provider) ids.add(n.id);
     for (const [key, { mesh, link }] of flows) {
       const on = ids.has(endId(link.source));
       if (on === lit.has(key)) continue;
@@ -407,7 +412,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       else lit.delete(key);
       (mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value = on ? STREAM_OPACITY_LIT : STREAM_OPACITY;
     }
-  }, [flows, lit]);
+  }, [flows, lit, cache]);
   useEffect(refreshHighlight, [selectedId, refreshHighlight]);
 
   const onHover = useCallback(
@@ -437,23 +442,38 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const linkColor = useCallback((l: GLink) => (l.kind === "lineage" ? "#b08cff" : "#4c7dff"), []);
   const onClick = useCallback(
     (n: GNode) => {
-      if (n.kind === "model") onSelectRef.current(n.id);
-      else if (n.kind === "engine") resetCamera();
-      else focus(n);
+      // Models and providers open their details panel (and the camera flies to them).
+      if (n.kind === "engine") resetCamera();
+      else onSelectRef.current(n.id);
     },
-    [resetCamera, focus],
+    [resetCamera],
   );
-  const onDrag = useCallback(() => {
-    fitted.current = true;
-  }, []);
-  const onDragEnd = useCallback((n: GNode) => {
-    // Let dragged nodes settle back into the layout instead of pinning them.
-    if (n.kind !== "engine") {
-      n.fx = undefined;
-      n.fy = undefined;
-      n.fz = undefined;
-    }
-  }, []);
+  // Node dragging is off: a press that moved a few pixels used to grab the node and
+  // re-heat the whole layout, which felt like a bug when you just meant to click.
+
+  // Our own click detection: the library drops a click as soon as the mouse moves
+  // by a single pixel while pressed, so real-world clicks were often lost.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let down: { x: number; y: number } | null = null;
+    const onDown = (e: PointerEvent) => {
+      if (e.button === 0) down = { x: e.clientX, y: e.clientY };
+    };
+    const onUp = (e: PointerEvent) => {
+      if (!down || e.button !== 0) return;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+      down = null;
+      const node = hoveredRef.current;
+      if (moved <= CLICK_TOLERANCE && node) onClick(node);
+    };
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointerup", onUp);
+    return () => {
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointerup", onUp);
+    };
+  }, [onClick]);
   const onEngineStop = useCallback(() => {
     if (!fitted.current && fitWhenSpread(900)) fitted.current = true;
   }, [fitWhenSpread]);
@@ -504,8 +524,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           nodeLabel={tooltip}
           nodeVal={nodeVal}
           onNodeHover={onHover}
-          onNodeClick={onClick}
-          onNodeDragEnd={onDragEnd}
+          enableNodeDrag={false}
           linkSource="source"
           linkTarget="target"
           linkThreeObject={makeLink}
@@ -518,7 +537,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           warmupTicks={60}
           cooldownTicks={250}
           onEngineStop={onEngineStop}
-          onNodeDrag={onDrag}
+
         />
       )}
     </div>

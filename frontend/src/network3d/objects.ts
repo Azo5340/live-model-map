@@ -296,13 +296,18 @@ export class ResourcePool {
         ctx.fillStyle = "#ffffff";
         ctx.fill();
         ctx.clip();
-        // Keep the logo's proportions, with a little breathing room inside the disc.
-        const box = TEX * 0.86;
-        const scale = Math.min(box / img.width, box / img.height);
+        // Hugging Face avatars are made for circular crops: fill the disc ("cover"),
+        // centered, like a profile picture, instead of letterboxing a square in a circle.
+        const scale = Math.max(TEX / img.width, TEX / img.height);
         const w = img.width * scale;
         const h = img.height * scale;
         ctx.drawImage(img, (TEX - w) / 2, (TEX - h) / 2, w, h);
         ctx.restore();
+        // Hairline edge so light logos still read as a disc.
+        disc();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = "rgba(10,14,30,0.55)";
+        ctx.stroke();
         texture.needsUpdate = true;
       };
       img.src = url;
@@ -487,7 +492,7 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   const glow = new THREE.Sprite(glowMat);
   glow.scale.setScalar(3);
   const logoMaterial = pool.own(spriteMaterial(pool.logo(node.name, node.avatar), 1, true));
-  logoMaterial.color.set("#9aa7c9"); // dimmed below the bloom threshold so logos stay readable
+  logoMaterial.color.set("#c8c8c8"); // neutral dim: true logo colors, kept under the bloom threshold
   const logo = new THREE.Sprite(logoMaterial);
   logo.scale.setScalar(2);
   const ring = new THREE.Sprite(pool.glowRing(color(node.status)));
@@ -578,7 +583,7 @@ export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boole
     const amp = anim.kind === "provider" ? 1.5 : 0.8;
     anim.body.position.set(Math.cos(t * 0.4 + anim.phase) * amp * 0.5, Math.sin(t * 0.5 + anim.phase) * amp, 0);
     // Drawn toward the core while its train travels, then springing back.
-    anim.body.position.addScaledVector(anim.pullDir, anim.pull * anim.radius * 0.9);
+    anim.body.position.addScaledVector(anim.pullDir, anim.pull * anim.radius * 0.35);
     // Stretched along the pull, like a drop being tugged.
     sy += 0.12 * anim.pull;
     sx -= 0.06 * anim.pull;
