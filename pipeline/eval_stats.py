@@ -113,3 +113,39 @@ def ols_residuals(x: list[float], y: list[float]) -> list[float]:
     """How far each point sits above (+) or below (-) the best-fit line."""
     slope, intercept = fit_linear(x, y)
     return [b - (slope * a + intercept) for a, b in zip(x, y)]
+
+
+def bradley_terry(wins: dict[tuple[str, str], int], iters: int = 500) -> dict[str, float]:
+    """Strength of each model from head-to-head wins, on an Elo-like scale centred on 0.
+
+    wins[(a, b)] = problems a got right and b got wrong. Solved with the
+    minorise-maximise updates of Hunter (2004). Every pair that met gets half a
+    win each way, so a model that never won still gets a finite score.
+    """
+    players = sorted({p for pair in wins for p in pair})
+    w: dict[tuple[str, str], float] = {pair: float(count) for pair, count in wins.items()}
+    for a, b in {(min(a, b), max(a, b)) for a, b in wins}:
+        w[(a, b)] = w.get((a, b), 0.0) + 0.5
+        w[(b, a)] = w.get((b, a), 0.0) + 0.5
+    total_wins = {p: sum(v for (a, _), v in w.items() if a == p) for p in players}
+    games = {}
+    for (a, b), v in w.items():
+        key = (min(a, b), max(a, b))
+        games[key] = games.get(key, 0.0) + v
+    opponents: dict[str, list[tuple[str, float]]] = {p: [] for p in players}
+    for (a, b), n in games.items():
+        opponents[a].append((b, n))
+        opponents[b].append((a, n))
+    strength = {p: 1.0 for p in players}
+    for _ in range(iters):
+        new = {}
+        for p in players:
+            denom = sum(n / (strength[p] + strength[o]) for o, n in opponents[p])
+            new[p] = total_wins[p] / denom if denom else strength[p]
+        mean_log = sum(math.log(v) for v in new.values()) / len(new)
+        new = {p: v / math.exp(mean_log) for p, v in new.items()}
+        converged = max(abs(new[p] - strength[p]) for p in players) < 1e-9
+        strength = new
+        if converged:
+            break
+    return {p: 400 * math.log10(strength[p]) for p in players}
