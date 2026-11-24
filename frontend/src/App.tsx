@@ -235,7 +235,7 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2 text-slate-300">
                   <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: BADGE.memorises }} />
-                  Remembers answers
+                  Drops on new numbers
                 </div>
                 <div className="mt-1 border-t border-slate-800 pt-1 text-slate-500">Size: downloads.</div>
               </div>

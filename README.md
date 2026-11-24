@@ -146,10 +146,12 @@ second version was probably remembering answers. Results are combined with LMAre
 scale, and every score has a 95 % margin of error. Full design:
 `docs/superpowers/specs/2026-11-24-reasoning-eval-design.md`.
 
-- Raw answers: `eval/answers.jsonl` (problem IDs only; the dataset's licence doesn't allow sharing
-  its text). Summary for the site: `eval/eval.json`.
+- Scores per answer: `eval/answers.jsonl` (problem IDs, extracted answer, right or wrong, cost; no
+  text, since the dataset's licence doesn't allow sharing it and replies often restate the problem).
+  Reply texts are only kept locally (`eval/replies.jsonl`, git-ignored). Summary for the site: `eval/eval.json`.
 - Needs the repository secret `OPENROUTER_API_KEY`. Spending stops before `EVAL_BUDGET_USD`
-  (repository variable, default 10 $). Models already evaluated are never asked again.
+  (repository variable, default 10 $). Models already evaluated are never asked again. Also set a
+  credit limit on the OpenRouter key itself: that is the only cap the code can't get wrong.
 - Try it without spending: `python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --dry-run --top 5`
 - Tests: `python3 -m unittest discover -s tests -v`
 

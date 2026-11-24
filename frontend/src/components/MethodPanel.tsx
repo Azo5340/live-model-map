@@ -35,8 +35,8 @@ export default function MethodPanel({ evaluation, onClose }: { evaluation: EvalS
         <h3 className="mt-4 font-medium text-slate-100">The problems</h3>
         <p>
           A fixed sample from GSM8K, a well-known set of word problems, and the same problems with the names and
-          numbers changed (Apple's GSM-Symbolic). A model that does clearly worse on the second version was probably
-          remembering answers rather than reasoning.
+          numbers changed (Apple's GSM-Symbolic). A model that does clearly worse on the second version may have seen
+          the original problems during training (or just finds the new numbers harder).
         </p>
         <h3 className="mt-4 font-medium text-slate-100">How models are asked</h3>
         <p>
@@ -51,7 +51,10 @@ export default function MethodPanel({ evaluation, onClose }: { evaluation: EvalS
         <ul className="list-disc space-y-1 pl-5">
           <li>Every score has a 95 % margin of error: 70 % on 60 problems really means "somewhere around 58–80 %".</li>
           <li>Two models are "tied" when the gap between them could just be luck (McNemar test on the same problems).</li>
-          <li>"Remembers answers" only when the drop on the changed problems is clearly more than chance.</li>
+          <li>
+            "Drops on new numbers" only when the drop is clearly more than chance, with the threshold tightened for the
+            number of models tested (Bonferroni correction).
+          </li>
           <li>
             The combined score puts these results and LMArena ratings on one scale (Bradley-Terry, the maths LMArena
             uses){evaluation.scale === "separate" ? "; for now too few models have both, or the two rankings don't agree well enough, so the scales are kept apart" : ""}.
@@ -66,7 +69,7 @@ export default function MethodPanel({ evaluation, onClose }: { evaluation: EvalS
           Models already tested are never asked again.
         </p>
         <p className="mt-4">
-          Every raw answer is public:{" "}
+          Every answer's score is public (reply texts aren't published: they often restate the licensed problems):{" "}
           <a href={ANSWERS_URL} target="_blank" rel="noreferrer" className="text-slate-100 underline underline-offset-2">
             eval/answers.jsonl
           </a>

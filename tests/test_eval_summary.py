@@ -86,6 +86,24 @@ class SummaryTest(unittest.TestCase):
         s = self.summary(answers, models)
         self.assertEqual(s["scale"], "separate")
 
+    def test_no_pairing_without_shared_problems(self):
+        few = [{"model_id": "b", "pid": f"{100 + i}:0", "variant": "known", "correct": True, "truncated": False,
+                "cost": 0.001} for i in range(3)]
+        s = self.summary(answers_for("a", 40, 40) + answers_for("c", 30, 30) + few,
+                         [node("a", 1), node("b", 10**6), node("c", 2)])
+        self.assertIsNone(s["models"]["b"]["quality"])
+        self.assertNotIn("b", s["models"]["a"]["tied_with"])
+
+    def test_memorises_corrected_for_many_models(self):
+        # A 10-point drop (p = 0.002) is clear for one model, but not when 30 models are tested.
+        alone = self.summary(answers_for("x", 55, 45), [node("x", 1)])
+        self.assertTrue(alone["models"]["x"]["memorises"])
+        answers = answers_for("x", 55, 45)
+        for i in range(29):
+            answers += answers_for(f"m{i}", 40, 40)
+        crowd = self.summary(answers, [node("x", 1)] + [node(f"m{i}", 1) for i in range(29)])
+        self.assertFalse(crowd["models"]["x"]["memorises"])
+
     def test_tied_models(self):
         s = self.summary(answers_for("a", 40, 40) + answers_for("b", 41, 40), [node("a", 1), node("b", 2)])
         self.assertEqual(s["models"]["a"]["tied_with"], ["b"])
@@ -98,6 +116,10 @@ class SummaryTest(unittest.TestCase):
         self.assertAlmostEqual(self.summary(answers_for("a", 1, 1), [node("a", 1)])["spent_usd"], 0.12)
 
 
+FULL = {"known": {"k": 40, "n": 60, "lo": 0.5, "hi": 0.8}, "modified": {"k": 40, "n": 60, "lo": 0.5, "hi": 0.8},
+        "memorises": False, "drop": None}
+
+
 class HeadlineTest(unittest.TestCase):
     def test_headline_none_when_nothing_holds(self):
         self.assertIsNone(headline({"models": {}, "popularity": None}))
@@ -107,15 +129,27 @@ class HeadlineTest(unittest.TestCase):
         summary = {
             "popularity": None,
             "models": {
-                "big": {"downloads": 10000, "quality": q(900, 850, 950), "memorises": False, "drop": None},
-                "mid": {"downloads": 5000, "quality": q(1000, 960, 1040), "memorises": False, "drop": None},
-                "small": {"downloads": 500, "quality": q(1100, 1060, 1140), "memorises": False, "drop": None},
+                "big": {"downloads": 10000, "quality": q(900, 850, 950), **FULL},
+                "mid": {"downloads": 5000, "quality": q(1000, 960, 1040), **FULL},
+                "small": {"downloads": 500, "quality": q(1100, 1060, 1140), **FULL},
             },
         }
         self.assertEqual(
             headline(summary),
             "2 of the 3 most downloaded models reason worse than a model with 10× fewer downloads.",
         )
+
+    def test_headline_ignores_models_with_few_answers(self):
+        q = lambda v, lo, hi: {"value": v, "lo": lo, "hi": hi, "source": "measured"}  # noqa: E731
+        full = {"k": 40, "n": 60, "lo": 0.5, "hi": 0.8}
+        few = {"k": 1, "n": 3, "lo": 0.1, "hi": 0.8}
+        summary = {"popularity": None, "models": {
+            "big": {"downloads": 10000, "quality": q(900, 850, 950), "known": few, "modified": few,
+                    "memorises": False, "drop": None},
+            "small": {"downloads": 500, "quality": q(1100, 1060, 1140), "known": full, "modified": full,
+                      "memorises": False, "drop": None},
+        }}
+        self.assertIsNone(headline(summary))
 
     def test_headline_rule_2_text(self):
         summary = {"popularity": None, "names": {"a": "Model A"}, "models": {

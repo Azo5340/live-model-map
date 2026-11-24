@@ -8,6 +8,7 @@ up where it left off.
 import json
 import random
 import ssl
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -36,8 +37,9 @@ class Client(Protocol):
 
 
 class OpenRouterClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, prices: dict[str, tuple[float, float, float]] | None = None):
         self.api_key = api_key
+        self.prices = prices or {}
 
     def ask(self, openrouter_id: str, prompt: str) -> dict:
         body = {
@@ -48,6 +50,10 @@ class OpenRouterClient:
             "usage": {"include": True},
             "provider": {"sort": "price"},
         }
+        if openrouter_id in self.prices:
+            # Never fall back to a provider pricier than the catalogue price ($ per million tokens).
+            prompt, completion, request = self.prices[openrouter_id]
+            body["provider"]["max_price"] = {"prompt": prompt * 1e6, "completion": completion * 1e6, "request": request}
         request = urllib.request.Request(
             CHAT_URL,
             data=json.dumps(body).encode(),
@@ -109,21 +115,31 @@ def run(
     answers_path: Path,
     budget: float,
     spent: float,
-    price: dict[str, tuple[float, float]],
+    price: dict[str, tuple[float, float, float]],
+    deadline: float | None = None,
+    clock=time.monotonic,
 ) -> float:
     """Ask each (model, problem, variant) not answered yet; stop before the budget could be crossed.
 
-    Returns the new total spent.
+    price[openrouter_id] = ($ per prompt token, $ per completion token, $ per request).
+    Stops at `deadline` (a `clock()` value) so the job always has time to save.
+    Scores go to answers_path (public); the reply text, which often restates the
+    problem, goes to replies.jsonl next to it (git-ignored, never published). Returns the new total spent.
     """
     done = {(a["model_id"], a["pid"], a["variant"]) for a in load_answers(answers_path)}
     failed_models: set[str] = set()
+    worst_seen: dict[str, float] = {}  # a model that costs more than estimated raises its own estimate
     answers_path.parent.mkdir(parents=True, exist_ok=True)
-    with answers_path.open("a") as out:
+    replies_path = answers_path.with_name("replies.jsonl")
+    with answers_path.open("a") as out, replies_path.open("a") as replies:
         for model_id, openrouter_id, problem, variant in todo:
             if (model_id, problem.pid, variant) in done or model_id in failed_models:
                 continue
-            prompt_price, completion_price = price[openrouter_id]
-            worst = prompt_price * PROMPT_TOKENS_BOUND + completion_price * MAX_TOKENS
+            if deadline is not None and clock() >= deadline:
+                break
+            prompt_price, completion_price, request_price = price[openrouter_id]
+            estimate = prompt_price * PROMPT_TOKENS_BOUND + completion_price * MAX_TOKENS + request_price
+            worst = max(estimate, worst_seen.get(openrouter_id, 0.0))
             if spent + worst > budget:
                 break
             question, gold = (
@@ -131,18 +147,21 @@ def run(
             )
             try:
                 reply = client.ask(openrouter_id, PROMPT.format(question=question))
-            except ClientError:
+            except Exception:  # noqa: BLE001 — any failure only skips this model for this run
                 failed_models.add(model_id)
                 continue
             cost = reply["cost"] if reply.get("cost") is not None else worst
+            worst_seen[openrouter_id] = max(worst_seen.get(openrouter_id, 0.0), cost)
             spent += cost
             extracted = extract_answer(reply["text"])
             truncated = reply["finish_reason"] == "length"
+            replies.write(json.dumps({"model_id": model_id, "pid": problem.pid, "variant": variant,
+                                      "reply": reply["text"]}) + "\n")
+            replies.flush()
             out.write(json.dumps({
                 "model_id": model_id,
                 "pid": problem.pid,
                 "variant": variant,
-                "reply": reply["text"],
                 "extracted": extracted,
                 "gold": gold,
                 "correct": extracted is not None and abs(extracted - gold) < 1e-6 and not truncated,

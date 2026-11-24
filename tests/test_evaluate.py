@@ -25,7 +25,7 @@ class EvaluateTest(unittest.TestCase):
             models_file = Path(tmp) / "models.json"
             models_file.write_text(json.dumps(graph))
             # Models 0-4 are on OpenRouter; model 5 (most downloaded) is not.
-            catalogue = {f"org/model-{i}": {"openrouter_id": f"org/m{i}", "price": (1e-7, 4e-7)} for i in range(5)}
+            catalogue = {f"org/model-{i}": {"openrouter_id": f"org/m{i}", "price": (1e-7, 4e-7, 0.0)} for i in range(5)}
             out = Path(tmp) / "eval"
             with mock.patch.object(evaluate, "load_problems", return_value=PROBLEMS), \
                     mock.patch.object(evaluate, "fetch_catalogue", return_value=catalogue), \

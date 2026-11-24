@@ -38,7 +38,7 @@ export default function QualitySection({
           )}
           {e.memorises && (
             <p className="text-xs" style={{ color: BADGE.memorises }}>
-              Remembers answers: it does clearly worse when only the numbers change.
+              Does clearly worse when only the numbers change: it may have seen the original problems.
             </p>
           )}
           {e.truncated > 0 && (

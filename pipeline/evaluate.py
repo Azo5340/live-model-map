@@ -14,6 +14,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -44,16 +45,18 @@ def budget_from(arg: float | None) -> float:
 
 
 def fetch_catalogue() -> dict[str, dict]:
-    """{hugging face id (lowercase): {"openrouter_id", "price": ($/prompt token, $/completion token)}}.
+    """{hugging face id (lowercase): {"openrouter_id", "price": ($/prompt token, $/completion token, $/request)}}.
 
     Paid listings are preferred over ":free" ones, which have tight rate limits.
+    Hidden reasoning tokens are priced at the higher of the completion and reasoning rates.
     """
     out: dict[str, dict] = {}
     for entry in _get_json(OPENROUTER_MODELS)["data"]:
         repo = entry.get("hugging_face_id")
         pricing = entry.get("pricing") or {}
         try:
-            price = (float(pricing["prompt"]), float(pricing["completion"]))
+            completion = max(float(pricing["completion"]), float(pricing.get("internal_reasoning") or 0))
+            price = (float(pricing["prompt"]), completion, float(pricing.get("request") or 0))
         except (KeyError, TypeError, ValueError):
             continue
         if not repo or min(price) < 0:
@@ -97,6 +100,7 @@ def main(argv: list[str] | None = None) -> Path:
     parser.add_argument("--budget", type=float, help="spending cap in USD (default: EVAL_BUDGET_USD or 10)")
     parser.add_argument("--top", type=int, default=30, help="how many of the most downloaded served models")
     parser.add_argument("--dry-run", action="store_true", help="use a fake model; spends nothing")
+    parser.add_argument("--deadline-minutes", type=float, help="stop asking after this long, so the job can save")
     args = parser.parse_args(argv)
 
     out = Path(args.out) if args.out else (Path(tempfile.mkdtemp()) if args.dry_run else Path("eval"))
@@ -114,16 +118,18 @@ def main(argv: list[str] | None = None) -> Path:
         key = os.environ.get("OPENROUTER_API_KEY", "").strip()
         if not key:
             raise SystemExit("OPENROUTER_API_KEY is not set: add it as a repository secret (or use --dry-run).")
-        client = OpenRouterClient(key)
 
     answers_path = out / "answers.jsonl"
     spent = spent_so_far(load_answers(answers_path))
     price = {catalogue[n["id"].lower()]["openrouter_id"]: catalogue[n["id"].lower()]["price"] for n in candidates}
+    if not args.dry_run:
+        client = OpenRouterClient(key, price)
+    deadline = time.monotonic() + 60 * args.deadline_minutes if args.deadline_minutes else None
     todo = [
         (n["id"], catalogue[n["id"].lower()]["openrouter_id"], p, variant)
         for n in candidates for p in problems for variant in ("known", "modified")
     ]
-    spent = run(client, todo, answers_path, budget, spent, price)
+    spent = run(client, todo, answers_path, budget, spent, price, deadline=deadline)
 
     answers = load_answers(answers_path)
     evaluated = sorted({a["model_id"] for a in answers})

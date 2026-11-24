@@ -31,15 +31,17 @@ def _wins(correct: dict[str, dict[tuple, bool]], items: list[tuple]) -> dict[tup
     models = sorted(correct)
     for i, a in enumerate(models):
         for b in models[i + 1:]:
-            ab = ba = 0
+            ab = ba = shared = 0
             for item in items:
                 x, y = correct[a].get(item), correct[b].get(item)
                 if x is None or y is None:
                     continue
+                shared += 1
                 ab += x and not y
                 ba += y and not x
-            wins[(a, b)] = ab
-            wins[(b, a)] = ba
+            if shared:  # models that never answered the same problem aren't compared
+                wins[(a, b)] = ab
+                wins[(b, a)] = ba
     return wins
 
 
@@ -76,6 +78,9 @@ def summarize(answers: list[dict], models: list[dict], claimed: dict[str, float 
         by_model.setdefault(a["model_id"], []).append(a)
     correct = {mid: {(a["pid"], a["variant"]): bool(a["correct"]) for a in rows} for mid, rows in by_model.items()}
 
+    # "Remembers answers" is tested once per model, so the threshold is corrected
+    # for the number of models (Bonferroni): with 30 models, p < 0.05 / 30.
+    memorise_alpha = 0.05 / max(1, len(by_model))
     entries: dict[str, dict] = {}
     for mid, rows in by_model.items():
         known = [a for a in rows if a["variant"] == "known"]
@@ -83,16 +88,18 @@ def summarize(answers: list[dict], models: list[dict], claimed: dict[str, float 
         k_by, m_by = {a["pid"]: a["correct"] for a in known}, {a["pid"]: a["correct"] for a in modified}
         paired = sorted(k_by.keys() & m_by.keys())
         drop = None
+        clear_drop = False
         if paired:
             mean, lo, hi = paired_bootstrap_diff([k_by[p] for p in paired], [m_by[p] for p in paired])
             drop = {"mean": mean, "lo": lo, "hi": hi}
+            only_known = sum(k_by[p] and not m_by[p] for p in paired)
+            only_modified = sum(m_by[p] and not k_by[p] for p in paired)
+            clear_drop = only_known > only_modified and mcnemar_p(only_known, only_modified) < memorise_alpha
         entries[mid] = {
             "known": _score(known),
             "modified": _score(modified),
             "drop": drop,
-            "memorises": bool(
-                drop and drop["lo"] > 0 and len(known) >= MIN_FOR_MEMORISES and len(modified) >= MIN_FOR_MEMORISES
-            ),
+            "memorises": clear_drop and len(known) >= MIN_FOR_MEMORISES and len(modified) >= MIN_FOR_MEMORISES,
             "truncated": sum(bool(a.get("truncated")) for a in rows),
             "claimed_gsm8k": claimed.get(mid),
             "quality": None,
@@ -106,6 +113,8 @@ def summarize(answers: list[dict], models: list[dict], claimed: dict[str, float 
     for i, a in enumerate(measured):
         for b in measured[i + 1:]:
             shared = correct[a].keys() & correct[b].keys()
+            if not shared:
+                continue
             ab = sum(correct[a][i] and not correct[b][i] for i in shared)
             ba = sum(correct[b][i] and not correct[a][i] for i in shared)
             if mcnemar_p(ab, ba) >= 0.05:
@@ -174,7 +183,14 @@ def headline(summary: dict) -> str | None:
     names = summary.get("names") or {}
 
     # 1. Popular models beaten, beyond doubt, by a model with 10x fewer downloads.
-    rated = {m: e for m, e in models.items() if e.get("quality") and e["quality"].get("lo") is not None}
+    #    Only models with full answer sets on both sides: a few lucky answers prove nothing.
+    def enough(e: dict) -> bool:
+        return all((e.get(s) or {}).get("n", 0) >= MIN_FOR_MEMORISES for s in ("known", "modified"))
+
+    rated = {
+        m: e for m, e in models.items()
+        if e.get("quality") and e["quality"].get("lo") is not None and enough(e)
+    }
     beaten = [
         m for m, e in rated.items()
         if any(

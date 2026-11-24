@@ -40,19 +40,28 @@ jobs:
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --dry-run
           else
-            python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --out eval
+            # Stop asking after 4 h so there is always time to save what was paid for.
+            python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --out eval --deadline-minutes 240
           fi
 
-      # The next check-up (every 15 min) publishes eval/eval.json with the site.
+      # Runs even if the evaluation failed: answers already paid for must never be lost,
+      # since the budget is the sum of the committed costs. The next check-up
+      # (every 15 min) publishes eval/eval.json with the site.
       - name: Save the answers
-        if: ${{ inputs.dry_run != true }}
+        if: ${{ always() && inputs.dry_run != true }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add eval
+          git add eval/answers.jsonl eval/eval.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "Nothing new."
-          else
-            git commit -m "Evaluation results $(date -u +%Y-%m-%dT%H:%MZ)"
-            git push
+            exit 0
           fi
+          git commit -m "Evaluation results $(date -u +%Y-%m-%dT%H:%MZ)"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase && git push && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
+      # eval/replies.jsonl (reply texts, which often restate the licensed problems) is
+      # git-ignored and discarded with the runner: only scores are published.
