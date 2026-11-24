@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { compare } from "../compare";
 import { fmt, METRIC_LABELS, providerColor, STATUS, statusOf } from "../format";
-import type { AIModel, Metrics } from "../types";
+import type { AIModel, EvalSummary, Metrics } from "../types";
+import QualitySection from "./QualitySection";
 
 const CHART_METRICS: (keyof Metrics)[] = [
   "elo_score",
@@ -15,10 +16,14 @@ const CHART_METRICS: (keyof Metrics)[] = [
 export default function SidePanel({
   model,
   models,
+  evaluation,
+  onSelect,
   onClose,
 }: {
   model: AIModel;
   models: Map<string, AIModel>;
+  evaluation: EvalSummary | null;
+  onSelect: (id: string) => void;
   onClose: () => void;
 }) {
   const parent = model.parent_model_id ? models.get(model.parent_model_id) : undefined;
@@ -107,6 +112,15 @@ export default function SidePanel({
           models ranked on LMArena.
         </p>
       </section>
+
+      {evaluation && (
+        <QualitySection
+          evaluation={evaluation}
+          modelId={model.id}
+          arenaRating={model.metrics.elo_score}
+          onSelect={onSelect}
+        />
+      )}
 
       <section className="border-t border-slate-800 p-4">
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-slate-400">

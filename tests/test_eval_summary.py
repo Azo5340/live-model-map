@@ -77,6 +77,15 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(s["models"]["f"]["quality"]["value"], 1400)
         self.assertEqual(s["models"]["c"]["quality"]["source"], "both")
 
+    def test_uncorrelated_overlap_keeps_scales_separate(self):
+        # Five models with both scores, but our ranking is the reverse of LMArena's: no shared scale.
+        answers, models = [], []
+        for i, m in enumerate("abcde"):
+            answers += answers_for(m, 20 + 8 * i, 15 + 8 * i)
+            models.append(node(m, 100 * (i + 1), elo=1400 - 50 * i))
+        s = self.summary(answers, models)
+        self.assertEqual(s["scale"], "separate")
+
     def test_tied_models(self):
         s = self.summary(answers_for("a", 40, 40) + answers_for("b", 41, 40), [node("a", 1), node("b", 2)])
         self.assertEqual(s["models"]["a"]["tied_with"], ["b"])

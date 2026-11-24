@@ -2,6 +2,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { Snapshot } from "./api";
 import CheckupLog from "./components/CheckupLog";
 import EventFeed from "./components/EventFeed";
+import FindingsCard from "./components/FindingsCard";
+import MethodPanel from "./components/MethodPanel";
 import ProviderPanel from "./components/ProviderPanel";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
@@ -29,6 +31,8 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<EvalSummary | null>(null);
   const [colorMode, setColorMode] = useState<"status" | "quality">("status");
+  const [methodOpen, setMethodOpen] = useState(false);
+  const closeMethod = useCallback(() => setMethodOpen(false), []);
   const [, setTick] = useState(0);
   const reducedMotion = useReducedMotion();
   const network = useRef<Network3DHandle>(null);
@@ -148,6 +152,7 @@ export default function App() {
             sidebarOpen ? "flex" : "hidden"
           } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#0C1328] sm:static sm:flex sm:w-56 lg:w-72`}
         >
+          {evaluation && <FindingsCard evaluation={evaluation} onOpenMethod={() => setMethodOpen(true)} />}
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
               <button
@@ -278,7 +283,13 @@ export default function App() {
 
         {selected && (
           <div className="absolute inset-0 z-20 md:static md:inset-auto">
-            <SidePanel model={selected} models={models} onClose={() => setSelectedId(null)} />
+            <SidePanel
+              model={selected}
+              models={models}
+              evaluation={evaluation}
+              onSelect={select}
+              onClose={() => setSelectedId(null)}
+            />
           </div>
         )}
         {selectedProvider && (
@@ -293,6 +304,7 @@ export default function App() {
           </div>
         )}
       </div>
+      {methodOpen && evaluation && <MethodPanel evaluation={evaluation} onClose={closeMethod} />}
     </div>
   );
 }

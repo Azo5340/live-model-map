@@ -9,11 +9,13 @@ import math
 import random
 
 from eval_stats import (
-    bootstrap_spearman, bradley_terry, fit_linear, mcnemar_p, ols_residuals, paired_bootstrap_diff, wilson,
+    bootstrap_spearman, bradley_terry, fit_linear, mcnemar_p, ols_residuals, paired_bootstrap_diff, spearman,
+    wilson,
 )
 
 MIN_FOR_MEMORISES = 30  # answers per set before a drop can be called
 MIN_ARENA_OVERLAP = 5  # models with both scores before putting them on one scale
+MIN_ARENA_AGREEMENT = 0.5  # rank correlation between the two scales needed to merge them
 MIN_FOR_POPULARITY = 10  # models with a quality score before correlating with downloads
 QUALITY_RESAMPLES = 200
 
@@ -113,7 +115,12 @@ def summarize(answers: list[dict], models: list[dict], claimed: dict[str, float 
     # One quality scale: Bradley-Terry on our answers, mapped onto LMArena when enough models have both.
     bt = _measured_quality(correct)
     overlap = [m for m in bt if m in arena]
-    scale = "arena" if len(overlap) >= MIN_ARENA_OVERLAP else "separate"
+    # Only merge when both scales rank the shared models in roughly the same order;
+    # otherwise the conversion would squash every score onto one value.
+    agree = len(overlap) >= MIN_ARENA_OVERLAP and spearman(
+        [bt[m][0] for m in overlap], [arena[m] for m in overlap]
+    ) >= MIN_ARENA_AGREEMENT
+    scale = "arena" if agree else "separate"
     if scale == "arena":
         slope, intercept = fit_linear([bt[m][0] for m in overlap], [arena[m] for m in overlap])
         for mid, (v, lo, hi) in bt.items():
