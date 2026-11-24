@@ -5,9 +5,9 @@ import EventFeed from "./components/EventFeed";
 import ProviderPanel from "./components/ProviderPanel";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
-import { ago, STATUS, statusOf } from "./format";
+import { ago, BADGE, NO_DATA, STATUS, statusOf, THEME } from "./format";
 import type { Network3DHandle } from "./network3d/Network3D";
-import type { AIModel, Checkup, ModelStatus, Providers, StreamEvent, TodoItem } from "./types";
+import type { AIModel, Checkup, EvalSummary, ModelStatus, Providers, StreamEvent, TodoItem } from "./types";
 import { useLiveData } from "./useLiveData";
 import { hasWebGL, useReducedMotion } from "./useReducedMotion";
 
@@ -27,6 +27,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [flashes, setFlashes] = useState<Record<string, "new" | "updated">>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [evaluation, setEvaluation] = useState<EvalSummary | null>(null);
+  const [colorMode, setColorMode] = useState<"status" | "quality">("status");
   const [, setTick] = useState(0);
   const reducedMotion = useReducedMotion();
   const network = useRef<Network3DHandle>(null);
@@ -61,6 +63,7 @@ export default function App() {
       setEvents(s.events);
       setCheckups(s.checkups);
       setTodo(s.todo.items);
+      setEvaluation((prev) => (prev?.generated_at === s.evaluation?.generated_at ? prev : s.evaluation));
     },
     [flash],
   );
@@ -177,6 +180,8 @@ export default function App() {
                 onSelect={select}
                 onClear={clearSelection}
                 reducedMotion={reducedMotion}
+                colorMode={evaluation ? colorMode : "status"}
+                evaluation={evaluation}
               />
             </Suspense>
           ) : (
@@ -189,6 +194,47 @@ export default function App() {
           )}
 
           <div className="pointer-events-none absolute right-3 top-3 z-10 flex flex-col items-end gap-2">
+            {evaluation && (
+              <div className="pointer-events-auto flex rounded-lg border border-white/5 bg-[#0C1328]/90 p-0.5 text-xs">
+                {(["status", "quality"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setColorMode(mode)}
+                    aria-pressed={colorMode === mode}
+                    className={`rounded-md px-2.5 py-1 ${
+                      colorMode === mode ? "bg-white/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {mode === "status" ? "Status" : "Quality"}
+                  </button>
+                ))}
+              </div>
+            )}
+            {evaluation && colorMode === "quality" ? (
+              <div className="pointer-events-auto hidden max-w-[13rem] rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-2 text-xs leading-snug sm:block">
+                <div
+                  className="mb-1 h-2 rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${THEME.blue}, ${THEME.violet})` }}
+                />
+                <div className="flex justify-between gap-3 text-slate-400">
+                  <span>Weaker</span>
+                  <span>Stronger</span>
+                </div>
+                <div className="text-slate-500">Measured reasoning</div>
+                <div className="mt-1.5 flex items-center gap-2 text-slate-300">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: NO_DATA }} /> Not tested
+                </div>
+                <div className="flex items-center gap-2 text-slate-300">
+                  <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: BADGE.underrated }} />
+                  Underrated
+                </div>
+                <div className="flex items-center gap-2 text-slate-300">
+                  <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: BADGE.memorises }} />
+                  Remembers answers
+                </div>
+                <div className="mt-1 border-t border-slate-800 pt-1 text-slate-500">Size: downloads.</div>
+              </div>
+            ) : (
             <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-2 text-xs sm:block">
               {(Object.keys(STATUS) as ModelStatus[]).map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
@@ -201,6 +247,7 @@ export default function App() {
                 Size: main, secondary, minor (by downloads). Streams: trains of light into the core, brighter for bigger nodes.
               </div>
             </div>
+            )}
             {webgl && (
               <button
                 onClick={() => network.current?.resetCamera()}

@@ -1,4 +1,4 @@
-import type { Checkup, Graph, StreamEvent, Todo } from "./types";
+import type { Checkup, EvalSummary, Graph, StreamEvent, Todo } from "./types";
 
 // The check-up pipeline publishes these files next to the site (data/*.json).
 // The query string busts GitHub Pages' cache so each poll sees the latest pass.
@@ -14,14 +14,17 @@ export interface Snapshot {
   events: StreamEvent[];
   checkups: Checkup[];
   todo: Todo;
+  /** Reasoning evaluation; null until its first run (or if the file can't be read). */
+  evaluation: EvalSummary | null;
 }
 
 export async function fetchSnapshot(): Promise<Snapshot> {
-  const [graph, events, checkups, todo] = await Promise.all([
+  const [graph, events, checkups, todo, evaluation] = await Promise.all([
     getJSON<Snapshot["graph"]>("models"),
     getJSON<StreamEvent[]>("events"),
     getJSON<Checkup[]>("checkups"),
     getJSON<Todo>("todo"),
+    getJSON<EvalSummary>("eval").catch(() => null),
   ]);
-  return { graph, events, checkups, todo };
+  return { graph, events, checkups, todo, evaluation };
 }

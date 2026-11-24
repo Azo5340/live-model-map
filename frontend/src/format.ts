@@ -19,6 +19,19 @@ export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
   unknown: { color: THEME.violet, label: "Unknown" },
 };
 
+/** Quality view: models without a quality score, and the two badges. */
+export const NO_DATA = "#5b6478";
+export const BADGE = { underrated: THEME.teal, memorises: "#E5AE4F" } as const;
+
+/** Blend from electric blue (lowest quality on the map) to violet (highest). */
+export function qualityColor(value: number, min: number, max: number): string {
+  const t = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0.5;
+  const from = parseInt(THEME.blue.slice(1), 16);
+  const to = parseInt(THEME.violet.slice(1), 16);
+  const mix = (shift: number) => Math.round(((from >> shift) & 255) * (1 - t) + ((to >> shift) & 255) * t);
+  return `#${[16, 8, 0].map((s) => mix(s).toString(16).padStart(2, "0")).join("")}`;
+}
+
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";
 
 /** Usage volume: live requests when a source provides them, otherwise daily downloads. */

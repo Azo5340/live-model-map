@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
-import { STATUS, THEME } from "../format";
+import { BADGE, STATUS, THEME } from "../format";
 import type { ModelStatus } from "../types";
 import type { GNode, Tier } from "./graphData";
 
@@ -51,6 +51,9 @@ export interface NodeAnim {
   /** Minor providers only show their name when in focus. */
   labelAlways: boolean;
   alert?: THREE.Sprite;
+  /** Quality view badge ring ("underrated" or "memorises"). */
+  badge?: THREE.Sprite;
+  badgeKind?: "underrated" | "memorises";
   animate?: (t: number, dt: number, motion: boolean) => void;
 }
 
@@ -548,6 +551,34 @@ export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatu
     pool.release(anim.alert.material);
     anim.alert = undefined;
   }
+}
+
+/** Recolors a node without changing its status (quality view, or back to the status color). */
+export function setTint(anim: NodeAnim, c: string) {
+  if (anim.disc) (anim.disc.material as THREE.SpriteMaterial).color.set(c);
+  if (anim.ring) (anim.ring.material as THREE.SpriteMaterial).color.set(c);
+  if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(c);
+}
+
+/** Adds, changes or removes the quality view's badge ring. */
+export function setBadge(pool: ResourcePool, anim: NodeAnim, badge: "underrated" | "memorises" | null) {
+  if (anim.badgeKind === (badge ?? undefined)) return;
+  if (anim.badge) {
+    anim.body.remove(anim.badge);
+    anim.fadeables = anim.fadeables.filter((f) => f.m !== anim.badge!.material);
+    pool.release(anim.badge.material);
+    anim.badge = undefined;
+    anim.badgeKind = undefined;
+  }
+  if (!badge) return;
+  const m = pool.own(glowMaterial(pool.ringTexture(16), BADGE[badge], 1));
+  const s = new THREE.Sprite(m);
+  s.scale.setScalar(3.2);
+  noPick(s);
+  fadeable(anim, m);
+  anim.body.add(s);
+  anim.badge = s;
+  anim.badgeKind = badge;
 }
 
 /** Focus state of a node: in focus, dimmed, or neutral (no focus anywhere). */
