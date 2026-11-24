@@ -7,7 +7,7 @@ import MethodPanel from "./components/MethodPanel";
 import ProviderPanel from "./components/ProviderPanel";
 import SidePanel from "./components/SidePanel";
 import TodoList from "./components/TodoList";
-import { ago, BADGE, NO_DATA, STATUS, statusOf, THEME } from "./format";
+import { ago, BADGE, NO_DATA, QUALITY_RAMP, STATUS, statusOf } from "./format";
 import type { Network3DHandle } from "./network3d/Network3D";
 import type { AIModel, Checkup, EvalSummary, ModelStatus, Providers, StreamEvent, TodoItem } from "./types";
 import { useLiveData } from "./useLiveData";
@@ -88,10 +88,12 @@ export default function App() {
   }, []);
   const clearSelection = useCallback(() => setSelectedId(null), []);
 
-  // Escape returns to the global view.
+  // Escape returns to the global view (unless it's closing the method dialog).
+  const methodOpenRef = useRef(false);
+  methodOpenRef.current = methodOpen;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setSelectedId(null);
+      if (e.key === "Escape" && !methodOpenRef.current) setSelectedId(null);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -124,7 +126,7 @@ export default function App() {
           ☰ <span className="text-xs">To review{todo.length ? ` (${todo.length})` : ""}</span>
         </button>
         <h1 className="font-semibold tracking-tight">
-          Live Model Map <span className="font-normal text-slate-500">· AI observability</span>
+          Live Model Map <span className="hidden font-normal text-slate-400 sm:inline">· AI observability</span>
         </h1>
         <span className="hidden text-sm text-slate-500 md:inline">
           {models.size} models · {Object.keys(providers).length} providers
@@ -147,11 +149,27 @@ export default function App() {
       </header>
 
       <div className="relative flex min-h-0 flex-1">
+        {sidebarOpen && (
+          <button
+            aria-label="Close the list"
+            onClick={() => setSidebarOpen(false)}
+            className="absolute inset-0 z-20 bg-black/50 sm:hidden"
+          />
+        )}
         <nav
           className={`${
             sidebarOpen ? "flex" : "hidden"
           } absolute inset-y-0 left-0 z-30 w-72 shrink-0 flex-col border-r border-white/5 bg-[#0C1328] sm:static sm:flex sm:w-56 lg:w-72`}
         >
+          <div className="flex justify-end border-b border-slate-800 px-2 py-1 sm:hidden">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label="Close the list"
+              className="rounded px-2 py-1 text-sm text-slate-300 hover:text-slate-100"
+            >
+              ✕ Close
+            </button>
+          </div>
           {evaluation && <FindingsCard evaluation={evaluation} onOpenMethod={() => setMethodOpen(true)} />}
           <div className="flex gap-1 border-b border-slate-800 p-2">
             {tabs.map((t) => (
@@ -216,16 +234,16 @@ export default function App() {
               </div>
             )}
             {evaluation && colorMode === "quality" ? (
-              <div className="pointer-events-auto hidden max-w-[13rem] rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-2 text-xs leading-snug sm:block">
+              <div className="pointer-events-auto max-w-[10rem] rounded-lg border border-white/5 bg-[#0C1328]/90 px-2.5 py-1.5 text-[11px] leading-snug sm:max-w-[13rem] sm:px-3 sm:py-2 sm:text-xs">
                 <div
                   className="mb-1 h-2 rounded-full"
-                  style={{ background: `linear-gradient(90deg, ${THEME.blue}, ${THEME.violet})` }}
+                  style={{ background: `linear-gradient(90deg, ${QUALITY_RAMP.join(", ")})` }}
                 />
                 <div className="flex justify-between gap-3 text-slate-400">
                   <span>Weaker</span>
                   <span>Stronger</span>
                 </div>
-                <div className="text-slate-500">Measured reasoning</div>
+                <div className="text-slate-400">Reasoning score</div>
                 <div className="mt-1.5 flex items-center gap-2 text-slate-300">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: NO_DATA }} /> Not tested
                 </div>
@@ -237,7 +255,7 @@ export default function App() {
                   <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: BADGE.memorises }} />
                   Drops on new numbers
                 </div>
-                <div className="mt-1 border-t border-slate-800 pt-1 text-slate-500">Size: downloads.</div>
+                <div className="mt-1 hidden border-t border-slate-800 pt-1 text-slate-400 sm:block">Size: downloads.</div>
               </div>
             ) : (
             <div className="pointer-events-auto hidden rounded-lg border border-white/5 bg-[#0C1328]/90 px-3 py-2 text-xs sm:block">

@@ -1,4 +1,4 @@
-import type { AIModel, Metrics, ModelStatus } from "./types";
+import type { AIModel, Metrics, ModelEval, ModelStatus } from "./types";
 
 /** Reference palette: deep navy, electric blue, violet, turquoise for interactions. */
 export const THEME = {
@@ -20,17 +20,40 @@ export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
 };
 
 /** Quality view: models without a quality score, and the two badges. */
-export const NO_DATA = "#5b6478";
-export const BADGE = { underrated: THEME.teal, memorises: "#E5AE4F" } as const;
+export const NO_DATA = "#7c8598";
+export const BADGE = { underrated: "#FFFFFF", memorises: "#E5AE4F" } as const;
 
-/** Blend from electric blue (lowest quality on the map) to violet (highest). */
+/**
+ * Quality colour scale: rises in lightness (deep blue-grey → sea green → pale lime), so weaker and
+ * stronger stay apart even in greyscale, and uses none of the status colours.
+ */
+export const QUALITY_RAMP = ["#2f5d7c", "#3fa7a0", "#e8f0a8"] as const;
+
 export function qualityColor(value: number, min: number, max: number): string {
   const t = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0.5;
-  const from = parseInt(THEME.blue.slice(1), 16);
-  const to = parseInt(THEME.violet.slice(1), 16);
-  const mix = (shift: number) => Math.round(((from >> shift) & 255) * (1 - t) + ((to >> shift) & 255) * t);
+  const seg = t < 0.5 ? 0 : 1;
+  const local = seg === 0 ? t * 2 : (t - 0.5) * 2;
+  const from = parseInt(QUALITY_RAMP[seg].slice(1), 16);
+  const to = parseInt(QUALITY_RAMP[seg + 1].slice(1), 16);
+  const mix = (shift: number) => Math.round(((from >> shift) & 255) * (1 - local) + ((to >> shift) & 255) * local);
   return `#${[16, 8, 0].map((s) => mix(s).toString(16).padStart(2, "0")).join("")}`;
 }
+
+/**
+ * "Underrated" means clearly above what downloads predict: at least one standard deviation of
+ * the gaps across all scored models. Shared by the map badge and the model panel.
+ */
+export function underratedThreshold(models: Record<string, ModelEval>): number {
+  const gaps = Object.values(models).flatMap((e) => (e.underrated == null ? [] : [e.underrated]));
+  const sd = Math.sqrt(gaps.reduce((a, g) => a + g * g, 0) / Math.max(1, gaps.length));
+  return sd > 0 ? sd : Infinity;
+}
+
+export const isUnderrated = (e: ModelEval | undefined, threshold: number): boolean =>
+  !!e?.quality && e.underrated != null && e.underrated >= threshold;
+
+/** 0.893 → "89%". */
+export const pct = (x: number) => `${Math.round(100 * x)}%`;
 
 export const statusOf = (m: AIModel): ModelStatus => m.status ?? "unknown";
 
@@ -43,7 +66,7 @@ export const METRIC_LABELS: Record<keyof Metrics, string> = {
   latency_ms: "Latency (ms)",
   cost_per_1k_tokens: "Cost / 1k tok ($)",
   context_window: "Context (tok)",
-  elo_score: "ELO (LMArena)",
+  elo_score: "Elo (LMArena)",
   availability_pct: "Availability 30 min (%)",
 };
 

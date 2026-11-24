@@ -160,7 +160,7 @@ class HeadlineTest(unittest.TestCase):
     def test_headline_rule_3_text(self):
         summary = {"models": {}, "popularity": {"spearman": 0.12, "lo": -0.2, "hi": 0.41, "n": 30}}
         self.assertEqual(
-            headline(summary), "Downloads barely predict reasoning (ρ = 0.12, 95 % CI -0.20 to 0.41)."
+            headline(summary), "Downloads barely predict reasoning (ρ = 0.12, 95% CI -0.20 to 0.41)."
         )
 
 

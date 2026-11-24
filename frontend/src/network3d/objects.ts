@@ -483,7 +483,7 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   label.position.y = -1.55;
   label.renderOrder = 3;
   // Minor providers keep their name for when they're in focus, to avoid label clutter.
-  anim.labelAlways = node.tier < 2;
+  anim.labelAlways = node.tier === 0; // only the main providers are named at the global zoom
   label.visible = anim.labelAlways;
 
   noPick(glow, ring, label);

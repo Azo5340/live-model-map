@@ -108,7 +108,7 @@ export default function SidePanel({
           </div>
         )}
         <p className="col-span-2 text-[11px] leading-snug text-slate-500">
-          Not published by our sources: speed, latency, request counts, error rates. ELO only exists for
+          Not published by our sources: speed, latency, request counts, error rates. Elo only exists for
           models ranked on LMArena.
         </p>
       </section>
@@ -117,7 +117,6 @@ export default function SidePanel({
         <QualitySection
           evaluation={evaluation}
           modelId={model.id}
-          arenaRating={model.metrics.elo_score}
           onSelect={onSelect}
         />
       )}

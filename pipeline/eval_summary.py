@@ -211,5 +211,5 @@ def headline(summary: dict) -> str | None:
     # 3. Downloads and quality barely related.
     p = summary.get("popularity")
     if p and p["lo"] <= 0 <= p["hi"]:
-        return f"Downloads barely predict reasoning (ρ = {p['spearman']:.2f}, 95 % CI {p['lo']:.2f} to {p['hi']:.2f})."
+        return f"Downloads barely predict reasoning (ρ = {p['spearman']:.2f}, 95% CI {p['lo']:.2f} to {p['hi']:.2f})."
     return None

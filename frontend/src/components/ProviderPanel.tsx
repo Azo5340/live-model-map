@@ -71,7 +71,7 @@ export default function ProviderPanel({
         </div>
         {elo.length > 0 && (
           <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <div className="text-[11px] text-slate-400">Best ELO (LMArena)</div>
+            <div className="text-[11px] text-slate-400">Best Elo (LMArena)</div>
             <div className="tabular-nums">{fmt(Math.max(...elo))}</div>
           </div>
         )}

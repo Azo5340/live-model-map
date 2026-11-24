@@ -3,8 +3,8 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo,
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { fmt, NO_DATA, qualityColor, STATUS, THEME } from "../format";
-import type { AIModel, EvalSummary, Providers } from "../types";
+import { fmt, isUnderrated, NO_DATA, pct, qualityColor, STATUS, THEME, underratedThreshold } from "../format";
+import type { AIModel, EvalSummary, ModelEval, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
   animateNode,
@@ -131,7 +131,19 @@ const LINE = {
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-function tooltip(n: GNode): string {
+/** In the quality view, what to say about a model's measured reasoning. */
+function qualityLine(e: ModelEval | undefined, threshold: number): string {
+  if (!e?.quality) return "Not tested yet";
+  const parts = [];
+  if (e.known) parts.push(`known ${pct(e.known.k / e.known.n)}`);
+  if (e.modified) parts.push(`new numbers ${pct(e.modified.k / e.modified.n)}`);
+  if (!e.known) parts.push(`LMArena only`);
+  if (e.memorises) parts.push("drops on new numbers");
+  else if (isUnderrated(e, threshold)) parts.push("underrated");
+  return `Reasoning: ${parts.join(" · ")}`;
+}
+
+function tooltip(n: GNode, quality: { models: Record<string, ModelEval>; threshold: number } | null): string {
   const status = STATUS[n.status];
   const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${status.color};margin-right:6px"></span>`;
   if (n.kind === "engine") {
@@ -143,8 +155,13 @@ function tooltip(n: GNode): string {
       <div class="net-tip-sub">${dot}worst status: ${status.label}</div></div>`;
   }
   const m = n.model!;
+  if (quality) {
+    return `<div class="net-tip"><b>${escapeHtml(m.name)}</b>
+    <div class="net-tip-sub">${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} downloads/day</div>
+    <div class="net-tip-sub">${escapeHtml(qualityLine(quality.models[m.id], quality.threshold))}</div></div>`;
+  }
   const extras = [
-    m.metrics.elo_score != null ? `ELO ${fmt(m.metrics.elo_score)}` : null,
+    m.metrics.elo_score != null ? `Elo ${fmt(m.metrics.elo_score)}` : null,
     m.metrics.availability_pct != null ? `availability ${fmt(m.metrics.availability_pct)}%` : null,
   ].filter(Boolean);
   return `<div class="net-tip"><b>${escapeHtml(m.name)}</b>
@@ -230,9 +247,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     const values = quality ? Object.values(quality).flatMap((e) => (e.quality ? [e.quality.value] : [])) : [];
     const min = Math.min(...values);
     const max = Math.max(...values);
-    // "Underrated" only for clear cases: at least one standard deviation above what downloads predict.
-    const residuals = quality ? Object.values(quality).flatMap((e) => (e.underrated == null ? [] : [e.underrated])) : [];
-    const sd = Math.sqrt(residuals.reduce((a, r) => a + r * r, 0) / Math.max(1, residuals.length));
+    const threshold = quality ? underratedThreshold(quality) : Infinity;
     for (const n of cache.values()) {
       if (n.kind !== "model") continue;
       const anim = objects.get(n.id)?.userData.anim as NodeAnim | undefined;
@@ -244,10 +259,17 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       }
       const e = quality[n.id];
       setTint(anim, e?.quality ? qualityColor(e.quality.value, min, max) : NO_DATA);
-      const underrated = e?.underrated != null && sd > 0 && e.underrated >= sd;
-      setBadge(pool, anim, e?.memorises ? "memorises" : underrated ? "underrated" : null);
+      setBadge(pool, anim, e?.memorises ? "memorises" : isUnderrated(e, threshold) ? "underrated" : null);
     }
   }, [colorMode, evaluation, models, cache, objects, pool]);
+
+  // The tooltip reads the colour mode from a ref, so switching modes doesn't re-process the graph.
+  const qualityTipRef = useRef<{ models: Record<string, ModelEval>; threshold: number } | null>(null);
+  qualityTipRef.current =
+    colorMode === "quality" && evaluation
+      ? { models: evaluation.models, threshold: underratedThreshold(evaluation.models) }
+      : null;
+  const nodeLabel = useCallback((n: GNode) => tooltip(n, qualityTipRef.current), []);
 
   // A metrics/status update makes the node pulse once.
   useEffect(() => {
@@ -690,7 +712,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           showNavInfo={false}
           controlType="orbit"
           nodeThreeObject={makeObject}
-          nodeLabel={tooltip}
+          nodeLabel={nodeLabel}
           nodeVal={nodeVal}
           onNodeHover={onHover}
           enableNodeDrag={false}
