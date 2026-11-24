@@ -26,11 +26,11 @@ export default function MethodPanel({ evaluation, onClose }: { evaluation: EvalS
         onClose();
       }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
-      className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-xl border border-white/10 bg-[#0C1328] p-0 text-sm leading-relaxed text-slate-300 backdrop:bg-black/60"
+      className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-[4px] border border-white/10 bg-panel p-0 text-sm leading-relaxed text-slate-300 backdrop:bg-black/60"
     >
       <article className="p-5">
         <header className="mb-3 flex items-start justify-between gap-3">
-          <h2 id="method-title" className="text-base font-semibold text-slate-100">How it's measured</h2>
+          <h2 id="method-title" className="font-serif text-2xl font-medium text-slate-100">How it's measured</h2>
           <button autoFocus onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-100">
             ✕
           </button>

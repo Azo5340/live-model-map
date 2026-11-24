@@ -18,7 +18,7 @@ export default function QualitySection({
   const underrated = isUnderrated(e, underratedThreshold(evaluation.models));
   return (
     <section className="border-t border-slate-800 p-4 text-sm">
-      <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500">Reasoning</h3>
+      <h3 className="eyebrow mb-2">Reasoning</h3>
       {!e || !e.known ? (
         <p className="text-slate-400">
           Not tested yet.
@@ -99,7 +99,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-slate-400">{label}</dt>
-      <dd className="text-right tabular-nums text-slate-200">{value}</dd>
+      <dd className="text-right font-mono tabular-nums text-slate-200">{value}</dd>
     </div>
   );
 }

@@ -1,18 +1,56 @@
 @import "tailwindcss";
 
+/*
+ * "Observatory log": green-black ink, bone text, aged brass for interaction.
+ * Newsreader names things (title, model names, the finding), IBM Plex Sans carries
+ * the interface, IBM Plex Mono carries every measurement.
+ */
 @theme {
-  --font-sans: "Inter Variable", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", "Newsreader", Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", monospace;
+
+  --color-ink: #0B1112;
+  --color-panel: #111A1B;
+  --color-brass: #C8A15A;
+  --color-verdigris: #5FA191;
+
+  /* The interface's greys, retuned from Tailwind's blue slate to cool-green neutrals. */
+  --color-slate-50: #F3F0E7;
+  --color-slate-100: #E7E2D4;
+  --color-slate-200: #D3D0C4;
+  --color-slate-300: #B9BBB2;
+  --color-slate-400: #959E99;
+  --color-slate-500: #7A8681;
+  --color-slate-600: #56625F;
+  --color-slate-700: #35423F;
+  --color-slate-800: #223031;
+  --color-slate-900: #162022;
+  --color-slate-950: #0E1516;
 }
 
 html, body, #root { height: 100%; margin: 0; }
 
 body {
-  background: #080D1C;
+  background: var(--color-ink);
+  color: var(--color-slate-100);
   font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01"; /* Inter's single-storey a and open digits */
   -webkit-font-smoothing: antialiased;
-  letter-spacing: -0.005em;
 }
+
+/* Measurements line up: every number in the interface uses tabular figures. */
+.tabular-nums, .font-mono { font-variant-numeric: tabular-nums; }
+
+/* Small mono eyebrows naming a section ("Finding", "Reasoning"). */
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+}
+
+:focus-visible { outline: 1px solid var(--color-brass); outline-offset: 2px; }
 
 @keyframes feed-in {
   from { transform: translateY(-4px); opacity: 0; }
@@ -20,23 +58,54 @@ body {
 }
 .feed-in { animation: feed-in 240ms ease-out; }
 
-/* 3D network hover tooltip (rendered by 3d-force-graph). */
+/* 3D network hover tooltip (rendered by 3d-force-graph): a catalogue entry. */
 .float-tooltip-kap {
   background: transparent !important;
   padding: 0 !important;
 }
 .net-tip {
-  background: rgba(12, 19, 40, 0.94);
-  border: 1px solid rgba(64, 218, 204, 0.25);
-  border-radius: 8px;
-  padding: 8px 10px;
-  font: 12px/1.5 var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  color: #DCE7FF;
-  max-width: 260px;
+  background: rgba(17, 26, 27, 0.96);
+  border: 1px solid #2c3b3b;
+  border-left: 2px solid var(--color-brass);
+  border-radius: 2px;
+  padding: 9px 12px 10px;
+  color: var(--color-slate-100);
+  min-width: 190px;
+  max-width: 280px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 }
-.net-tip b { font-weight: 600; color: #DCE7FF; }
-.net-tip-sub { color: #8b95a3; display: flex; align-items: center; }
+.net-tip-name {
+  font: 500 16px/1.2 var(--font-serif);
+  letter-spacing: -0.005em;
+}
+.net-tip-kind {
+  margin-top: 2px;
+  font: 400 10px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-slate-400);
+}
+.net-tip-rows {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 14px;
+  row-gap: 2px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid #2c3b3b;
+  font: 400 11.5px/1.5 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.net-tip-rows dt { color: var(--color-slate-400); }
+.net-tip-rows dd { margin: 0; text-align: right; color: var(--color-slate-100); }
+.net-tip-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  margin-right: 6px;
+  vertical-align: 1px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .feed-in { animation: none !important; }

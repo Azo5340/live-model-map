@@ -4,7 +4,7 @@ import type { StreamEvent } from "../types";
 const STYLE: Record<StreamEvent["type"], { icon: string; cls: string; label: string }> = {
   MODEL_ADDED: { icon: "✦", cls: "text-slate-300", label: "New model" },
   METRICS_UPDATED: { icon: "↻", cls: "text-slate-400", label: "Metrics" },
-  STATUS_CHANGED: { icon: "●", cls: "text-[#9d7fe0]", label: "Status change" },
+  STATUS_CHANGED: { icon: "●", cls: "text-brass", label: "Status change" },
   ALERT: { icon: "⚠", cls: "text-[#d9645f]", label: "Alert" },
 };
 
@@ -35,7 +35,7 @@ export default function EventFeed({
           return (
             <li
               key={`${e.ts}-${i}-${id}`}
-              className={`feed-in rounded-lg px-2 py-1.5 text-sm ${
+              className={`feed-in rounded-[3px] px-2 py-1.5 text-sm ${
                 id ? "cursor-pointer hover:bg-slate-800" : ""
               }`}
               onClick={() => id && onSelect(id)}

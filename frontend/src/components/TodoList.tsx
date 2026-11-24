@@ -5,7 +5,7 @@ const KIND_COLOR: Record<TodoKind, string> = {
   security_incident: STATUS.security_incident.color,
   down: STATUS.down.color,
   degraded: STATUS.degraded.color,
-  new_model: "#9ec5ff",
+  new_model: "#C8A15A",
 };
 
 /** What needs attention right now; items leave the list once the model is back to normal. */
@@ -20,7 +20,7 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
         {items.map((item) => (
           <li key={item.id}>
             <button
-              className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+              className="block w-full rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-white/5"
               onClick={() => onSelect(item.model_id)}
             >
               <div className="flex items-center gap-1.5 text-xs">

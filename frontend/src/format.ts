@@ -1,33 +1,39 @@
 import type { AIModel, Metrics, ModelEval, ModelStatus } from "./types";
 
-/** Reference palette: deep navy, electric blue, violet, turquoise for interactions. */
+/**
+ * "Observatory log" palette: green-black ink, bone text, aged brass for anything you can
+ * interact with, verdigris for healthy instruments, steel for structure.
+ */
 export const THEME = {
-  background: "#080D1C",
-  blue: "#247BFF",
-  violet: "#8B5CF6",
-  teal: "#40DACC",
-  text: "#DCE7FF",
+  background: "#0B1112",
+  panel: "#111A1B",
+  line: "#223031",
+  text: "#E7E2D4",
+  muted: "#959E99",
+  brass: "#C8A15A",
+  verdigris: "#5FA191",
+  steel: "#6F8C9B",
 } as const;
 
-// Calm, consistent saturation: blue/violet for the normal states, warm tones only
-// where something needs attention.
+// Muted, earthy states: verdigris when healthy, neutral slate when nothing is known,
+// warm tones only where something needs attention.
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
-  operational: { color: THEME.blue, label: "Operational" },
-  degraded: { color: "#E5AE4F", label: "Degraded" },
-  down: { color: "#EC5A72", label: "Down" },
-  security_incident: { color: "#E06BD8", label: "Security incident" },
-  unknown: { color: THEME.violet, label: "Unknown" },
+  operational: { color: THEME.verdigris, label: "Operational" },
+  degraded: { color: "#D4A24C", label: "Degraded" },
+  down: { color: "#C75B47", label: "Down" },
+  security_incident: { color: "#C96B92", label: "Security incident" },
+  unknown: { color: "#6E7A7D", label: "Unknown" },
 };
 
 /** Quality view: models without a quality score, and the two badges. */
 export const NO_DATA = "#7c8598";
-export const BADGE = { underrated: "#FFFFFF", memorises: "#E5AE4F" } as const;
+export const BADGE = { underrated: "#F4EFE0", memorises: "#D4A24C" } as const;
 
 /**
  * Quality colour scale: rises in lightness (deep blue-grey → sea green → pale lime), so weaker and
  * stronger stay apart even in greyscale, and uses none of the status colours.
  */
-export const QUALITY_RAMP = ["#2f5d7c", "#3fa7a0", "#e8f0a8"] as const;
+export const QUALITY_RAMP = ["#2d4b5f", "#7fa3b8", "#efe7c9"] as const;
 
 export function qualityColor(value: number, min: number, max: number): string {
   const t = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0.5;
@@ -86,7 +92,7 @@ export function fmt(n: number | null | undefined, digits = 0): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
-const PROVIDER_COLORS = ["#38bdf8", "#a78bfa", "#f472b6", "#34d399", "#fbbf24", "#fb7185", "#60a5fa"];
+const PROVIDER_COLORS = ["#C8A15A", "#5FA191", "#7FA3B8", "#B98A6E", "#A3A27A", "#8E86A8", "#6FA0A0"];
 
 export function providerColor(provider: string): string {
   let h = 0;

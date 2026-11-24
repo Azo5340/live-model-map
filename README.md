@@ -60,9 +60,11 @@ live-model-map/
 - **Focus**: hovering a node enlarges and brightens it, turns its direct relations' links
   turquoise and dims everything else; clicking keeps that focus and opens its panel (model or
   provider). Esc, a click in empty space or "Reset view" returns to the global view.
-- **Palette**: background `#080D1C`, electric blue `#247BFF`, violet `#8B5CF6`, turquoise
-  `#40DACC` for interactions, `#DCE7FF` for text; warm tones only for degraded, down and
-  security incidents. Gentle bloom (only highlights glow), light fog for depth, a faint star field.
+- **Look**: an "observatory log". Green-black ink `#0B1112`, bone text `#E7E2D4`, aged brass
+  `#C8A15A` for anything you can interact with, verdigris `#5FA191` for healthy models, steel for
+  structure; warm tones only for degraded, down and security incidents. Newsreader names things
+  (title, model names, the finding), IBM Plex Sans carries the interface, IBM Plex Mono every
+  measurement; hover cards read like catalogue entries.
 - **Motion**: nodes breathe and wobble slightly when a train leaves and lean toward the core while
   it travels. Rotate / zoom / pan; clicks tolerate a few pixels of mouse movement and nodes can't
   be dragged by accident.

@@ -21,7 +21,7 @@ function dotTexture(): THREE.CanvasTexture {
   return t;
 }
 
-const PALETTE = ["#DCE7FF", "#9cc0ff", "#247BFF", "#8B5CF6", "#b9a6ff"].map((c) => new THREE.Color(c));
+const PALETTE = ["#E7E2D4", "#C9D3D6", "#8FA9B5", "#C8A15A", "#B7C4B9"].map((c) => new THREE.Color(c));
 
 /** Random points: on a shell (stars) or gathered toward the center (dust). */
 function cloud(count: number, radius: number, centered: boolean): THREE.BufferGeometry {

@@ -8,7 +8,7 @@ export default function CheckupLog({ checkups, onSelect }: { checkups: Checkup[]
       {checkups.map((c) => {
         const ok = c.error_count === 0;
         return (
-          <li key={c.ts} className="rounded-lg px-2 py-1.5 text-sm">
+          <li key={c.ts} className="rounded-[3px] px-2 py-1.5 text-sm">
             <div className="flex items-center gap-2 text-xs">
               <span className={`h-2 w-2 rounded-full ${ok ? "bg-[#4fb38a]" : "bg-[#d4a948]"}`} />
               <span className="text-slate-300">
@@ -23,9 +23,9 @@ export default function CheckupLog({ checkups, onSelect }: { checkups: Checkup[]
               {c.total} models · {c.checked_status} statuses checked
               {c.added_count > 0 && <span className="text-slate-300"> · {c.added_count} new</span>}
               {c.status_changes.length > 0 && (
-                <span className="text-[#9d7fe0]"> · {c.status_changes.length} status changes</span>
+                <span className="text-brass"> · {c.status_changes.length} status change{c.status_changes.length === 1 ? "" : "s"}</span>
               )}
-              {c.metric_changes > 0 && <span> · {c.metric_changes} updates</span>}
+              {c.metric_changes > 0 && <span> · {c.metric_changes} update{c.metric_changes === 1 ? "" : "s"}</span>}
             </div>
             {c.added.map((a) => (
               <button

@@ -239,10 +239,10 @@ export class ResourcePool {
       ctx.closePath();
     };
     disc();
-    ctx.fillStyle = "#14203d";
+    ctx.fillStyle = "#1a2526";
     ctx.fill();
     ctx.fillStyle = THEME.text;
-    ctx.font = `600 ${TEX * 0.32}px "Inter Variable", Inter, system-ui, sans-serif`;
+    ctx.font = `500 ${TEX * 0.3}px "IBM Plex Mono", ui-monospace, monospace`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(provider.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?", TEX / 2, TEX / 2 + TEX * 0.02);
@@ -280,7 +280,7 @@ export class ResourcePool {
 
   label(text: string, height: number, color: string = THEME.text): SpriteText {
     const s = new SpriteText(text, height, color);
-    s.fontFace = '"Inter Variable", Inter, system-ui, sans-serif';
+    s.fontFace = '"IBM Plex Sans", system-ui, sans-serif';
     s.fontWeight = "500";
     s.backgroundColor = false;
     s.padding = 0;
@@ -389,19 +389,19 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
 
   // A diffuse electric-blue core: no pure white, a gradual falloff into the
   // network, so it stays the focal point without washing out the center.
-  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.blue, 0.4)));
+  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.brass, 0.34)));
   halo.scale.setScalar(4.6);
-  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.violet, 0.1)));
+  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.steel, 0.1)));
   nebula.scale.setScalar(7);
-  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#6aa2ff", 0.32)));
+  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#d9b878", 0.28)));
   aura.scale.setScalar(2.5);
-  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#8fb6ff", 0.14)));
+  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#e3cfa0", 0.12)));
   rays.scale.setScalar(4.4);
-  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#bcd3ff", 0.7)));
+  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#f3ead2", 0.7)));
   heart.scale.setScalar(1.15);
-  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), THEME.blue, 0.45)));
+  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), THEME.brass, 0.45)));
   edge.scale.setScalar(2.2);
-  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(4), "#9cc0ff", 0.3)));
+  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(4), "#e3cfa0", 0.3)));
   inner.scale.setScalar(1.35);
   const label = pool.label("LIVE ANALYSIS CORE", 0.13, THEME.text);
   label.material.opacity = 0.75;
@@ -409,7 +409,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
 
   // Ripples spread out from the core when trains arrive.
   const ripples = Array.from({ length: 4 }, () => {
-    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), "#6aa2ff", 0)));
+    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), "#d9b878", 0)));
     r.visible = false;
     r.userData.age = 1;
     return r;
@@ -676,7 +676,7 @@ export function setStreamState(mesh: THREE.Mesh, state: StreamState) {
   const u = (mesh.material as THREE.ShaderMaterial).uniforms;
   const base = mesh.userData.opacity as number;
   u.uOpacity.value = state === "lit" ? Math.min(0.9, base * 2.5 + 0.35) : state === "dim" ? base * 0.25 : base;
-  u.uColor.value.set(state === "lit" ? THEME.teal : (mesh.userData.color as string));
+  u.uColor.value.set(state === "lit" ? THEME.brass : (mesh.userData.color as string));
 }
 
 /** Stretches a stream between two points, stopping at the nodes' edges. */

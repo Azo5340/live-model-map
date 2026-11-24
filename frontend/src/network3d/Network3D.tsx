@@ -122,51 +122,60 @@ function clusterForce(cache: Map<string, GNode>, anchors: { current: Map<string,
 
 // Thin connection lines: secondary ones barely visible (5-15 %), turquoise when in focus.
 const LINE = {
-  member: { color: THEME.blue, opacity: 0.07 },
-  lineage: { color: THEME.violet, opacity: 0.08 },
-  lit: { color: THEME.teal, opacity: 0.6 },
+  member: { color: THEME.steel, opacity: 0.08 },
+  lineage: { color: THEME.muted, opacity: 0.07 },
+  lit: { color: THEME.brass, opacity: 0.6 },
   dim: 0.02,
 };
 
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
-/** In the quality view, what to say about a model's measured reasoning. */
-function qualityLine(e: ModelEval | undefined, threshold: number): string {
-  if (!e?.quality) return "Not tested yet";
-  const parts = [];
-  if (e.known) parts.push(`known ${pct(e.known.k / e.known.n)}`);
-  if (e.modified) parts.push(`new numbers ${pct(e.modified.k / e.modified.n)}`);
-  if (!e.known) parts.push(`LMArena only`);
-  if (e.memorises) parts.push("drops on new numbers");
-  else if (isUnderrated(e, threshold)) parts.push("underrated");
-  return `Reasoning: ${parts.join(" · ")}`;
+type QualityTip = { models: Record<string, ModelEval>; threshold: number } | null;
+
+const row = (key: string, value: string) => `<dt>${key}</dt><dd>${value}</dd>`;
+const dot = (color: string) => `<span class="net-tip-dot" style="background:${color}"></span>`;
+const card = (name: string, kind: string, rows: string[]) =>
+  `<div class="net-tip"><div class="net-tip-name">${escapeHtml(name)}</div>` +
+  `<div class="net-tip-kind">${kind}</div><dl class="net-tip-rows">${rows.join("")}</dl></div>`;
+
+/** In the quality view, what the evaluation measured for a model. */
+function qualityRows(e: ModelEval | undefined, threshold: number): string[] {
+  if (!e?.quality) return [row("reasoning", "not tested")];
+  const rows = [];
+  if (e.known) rows.push(row("known problems", pct(e.known.k / e.known.n)));
+  if (e.modified) rows.push(row("new numbers", pct(e.modified.k / e.modified.n)));
+  if (!e.known) rows.push(row("reasoning", "LMArena only"));
+  if (e.memorises) rows.push(row("flag", "drops on new numbers"));
+  else if (isUnderrated(e, threshold)) rows.push(row("flag", "underrated"));
+  return rows;
 }
 
-function tooltip(n: GNode, quality: { models: Record<string, ModelEval>; threshold: number } | null): string {
+/** Hover card: a catalogue entry, name first, then the measurements. */
+function tooltip(n: GNode, quality: QualityTip): string {
   const status = STATUS[n.status];
-  const dot = `<span style="display:inline-block;width:8px;height:8px;border-radius:9999px;background:${status.color};margin-right:6px"></span>`;
+  const state = `${dot(status.color)}${status.label.toLowerCase()}`;
   if (n.kind === "engine") {
-    return `<div class="net-tip"><b>Live Analysis Core</b><div class="net-tip-sub">Check-up every ~10 min: Hugging Face, OpenRouter, LMArena</div></div>`;
+    return card("Live analysis core", "Check-up every 15 min", [
+      row("sources", "Hugging Face, OpenRouter, LMArena"),
+    ]);
   }
   if (n.kind === "provider") {
-    return `<div class="net-tip"><b>${escapeHtml(n.name)}</b>
-      <div class="net-tip-sub">${n.modelCount} model(s) · ${fmt(n.volume)} downloads/day</div>
-      <div class="net-tip-sub">${dot}worst status: ${status.label}</div></div>`;
+    return card(n.name, `Provider · ${n.modelCount} model${n.modelCount === 1 ? "" : "s"}`, [
+      row("downloads/day", fmt(n.volume)),
+      row("worst status", state),
+    ]);
   }
   const m = n.model!;
+  const rows = [row("downloads/day", fmt(m.usage.download_count_24h))];
   if (quality) {
-    return `<div class="net-tip"><b>${escapeHtml(m.name)}</b>
-    <div class="net-tip-sub">${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} downloads/day</div>
-    <div class="net-tip-sub">${escapeHtml(qualityLine(quality.models[m.id], quality.threshold))}</div></div>`;
+    rows.push(...qualityRows(quality.models[m.id], quality.threshold));
+  } else {
+    rows.push(row("status", state));
+    if (m.metrics.elo_score != null) rows.push(row("Elo", fmt(m.metrics.elo_score)));
+    if (m.metrics.availability_pct != null) rows.push(row("availability", `${fmt(m.metrics.availability_pct)}%`));
   }
-  const extras = [
-    m.metrics.elo_score != null ? `Elo ${fmt(m.metrics.elo_score)}` : null,
-    m.metrics.availability_pct != null ? `availability ${fmt(m.metrics.availability_pct)}%` : null,
-  ].filter(Boolean);
-  return `<div class="net-tip"><b>${escapeHtml(m.name)}</b>
-    <div class="net-tip-sub">${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} downloads/day</div>
-    <div class="net-tip-sub">${dot}${status.label}${extras.length ? " · " + extras.join(" · ") : ""}</div></div>`;
+  return card(m.name, `Model · ${escapeHtml(m.provider)}`, rows);
 }
 
 const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
@@ -179,11 +188,11 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   // Hover is tracked in a ref, not state: re-rendering on every hover made the graph
   // re-process all nodes and links, which is what made camera moves stutter.
   const hoveredRef = useRef<GNode | null>(null);
-  // 3D labels are drawn into canvases once, so wait for Inter (max 2 s) before building the scene.
+  // 3D labels are drawn into canvases once, so wait for the fonts (max 2 s) before building the scene.
   const [fontReady, setFontReady] = useState(false);
   useEffect(() => {
     const timeout = new Promise((r) => setTimeout(r, 2000));
-    Promise.race([document.fonts.load('500 48px "Inter Variable"'), timeout])
+    Promise.race([Promise.all([document.fonts.load('500 48px "IBM Plex Sans"'), document.fonts.load('500 48px "IBM Plex Mono"')]), timeout])
       .catch(() => {})
       .finally(() => setFontReady(true));
   }, []);
@@ -264,7 +273,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   }, [colorMode, evaluation, models, cache, objects, pool]);
 
   // The tooltip reads the colour mode from a ref, so switching modes doesn't re-process the graph.
-  const qualityTipRef = useRef<{ models: Record<string, ModelEval>; threshold: number } | null>(null);
+  const qualityTipRef = useRef<QualityTip>(null);
   qualityTipRef.current =
     colorMode === "quality" && evaluation
       ? { models: evaluation.models, threshold: underratedThreshold(evaluation.models) }
