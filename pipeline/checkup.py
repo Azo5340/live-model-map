@@ -252,6 +252,24 @@ def event(kind: str, ts: str, model: dict, previous_status: str | None = None) -
     return {"type": kind, "ts": ts, "payload": payload}
 
 
+def settle_status(previous: dict | None, observed: str, immediate: bool) -> tuple[str, dict | None]:
+    """Status to publish, and the pending change to remember for the next pass.
+
+    A new status only shows once it has been seen on two passes in a row, so a
+    single bad reading doesn't flip a model back and forth. Overrides and
+    security incidents (entering or leaving one) apply at once.
+    """
+    if previous is None or immediate or previous.get("status") == "security_incident":
+        return observed, None
+    current = previous.get("status")
+    if observed == current:
+        return current, None
+    pending = previous.get("status_pending") or {}
+    if pending.get("status") == observed:
+        return observed, None
+    return current, {"status": observed, "seen": 1}
+
+
 def public(model: dict) -> dict:
     return {k: v for k, v in model.items() if k != "last_seen"}
 
@@ -356,6 +374,16 @@ def checkup(out: Path, previous_url: str | None) -> dict:
             m["status"], m["status_detail"] = override["status"], override.get("detail")
         m["status"] = m.get("status") or "unknown"
         m.setdefault("status_detail", None)
+        previous_model = previous_models.get(mid)
+        observed = m["status"]
+        m["status"], pending = settle_status(
+            previous_model, observed, immediate=bool(override) or observed == "security_incident"
+        )
+        if pending:
+            m["status_pending"] = pending
+            m["status_detail"] = previous_model.get("status_detail")  # keep the detail that matches the status shown
+        else:
+            m.pop("status_pending", None)
 
     for model_id in overrides.keys() - {k.lower() for k in merged}:
         errors.append(f"status_overrides.json: unknown model {model_id}")
