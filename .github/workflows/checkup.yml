@@ -49,6 +49,10 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: python pipeline/checkup.py --out frontend/public/data --previous-url "${{ steps.pages.outputs.base_url }}/data"
 
+      # Results of the daily reasoning evaluation (committed by evaluate.yml).
+      - name: Add the evaluation results
+        run: if [ -f eval/eval.json ]; then cp eval/eval.json frontend/public/data/eval.json; fi
+
       - name: Build the site
         working-directory: frontend
         run: |
