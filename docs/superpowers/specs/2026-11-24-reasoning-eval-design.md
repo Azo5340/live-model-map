@@ -1,6 +1,6 @@
 # Do popular models actually reason better?
 
-Design · 24 November 2026 · Draft, waiting for approval
+Design · 24 November 2026 · Approved
 
 ## Why
 
