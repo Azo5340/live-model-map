@@ -1,0 +1,67 @@
+name: Reasoning evaluation
+
+on:
+  # Once a day. Only models not evaluated yet are asked, within the budget.
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Use a fake model (spends nothing, commits nothing)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: evaluate
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install certifi
+
+      - name: Evaluate
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # Optional repository variable; the script defaults to 10 $.
+          EVAL_BUDGET_USD: ${{ vars.EVAL_BUDGET_USD }}
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --dry-run
+          else
+            # Stop asking after 4 h so there is always time to save what was paid for.
+            python pipeline/evaluate.py --models-url https://azo5340.github.io/live-model-map/data/models.json --out eval --deadline-minutes 240
+          fi
+
+      # Runs even if the evaluation failed: answers already paid for must never be lost,
+      # since the budget is the sum of the committed costs. The next check-up
+      # (every 15 min) publishes eval/eval.json with the site.
+      - name: Save the answers
+        if: ${{ always() && inputs.dry_run != true }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add eval/answers.jsonl eval/eval.json 2>/dev/null || true
+          if git diff --cached --quiet; then
+            echo "Nothing new."
+            exit 0
+          fi
+          git commit -m "Evaluation results $(date -u +%Y-%m-%dT%H:%MZ)"
+          for attempt in 1 2 3 4 5; do
+            git pull --rebase && git push && exit 0
+            sleep $((attempt * 10))
+          done
+          exit 1
+      # eval/replies.jsonl (reply texts, which often restate the licensed problems) is
+      # git-ignored and discarded with the runner: only scores are published.

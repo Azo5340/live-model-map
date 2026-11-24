@@ -3,8 +3,8 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo,
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { fmt, STATUS, THEME } from "../format";
-import type { AIModel, Providers } from "../types";
+import { fmt, NO_DATA, qualityColor, STATUS, THEME } from "../format";
+import type { AIModel, EvalSummary, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
   animateNode,
@@ -18,7 +18,9 @@ import {
   pulseHead,
   ResourcePool,
   setFocus,
+  setBadge,
   setStatus,
+  setTint,
   setStreamColor,
   setStreamState,
   type NodeAnim,
@@ -38,6 +40,9 @@ interface Props {
   /** Back to the global view (clear the selection). */
   onClear: () => void;
   reducedMotion: boolean;
+  /** Node colors: live status (default) or measured reasoning quality. */
+  colorMode: "status" | "quality";
+  evaluation: EvalSummary | null;
 }
 
 const BACKGROUND = THEME.background;
@@ -148,7 +153,7 @@ function tooltip(n: GNode): string {
 }
 
 const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
-  { models, providers, selectedId, flashes, onSelect, onClear, reducedMotion },
+  { models, providers, selectedId, flashes, onSelect, onClear, reducedMotion, colorMode, evaluation },
   ref,
 ) {
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
@@ -217,6 +222,32 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       setStreamColor(mesh, STATUS[cache.get(endId(link.source))?.status ?? "unknown"].color);
     }
   }, [models, providers, cache, objects, flows, pool]);
+
+  // Quality view: model orbs colored by measured quality (grey when untested), with badges.
+  // Runs after the status refresh above, and only recolors materials: the graph isn't rebuilt.
+  useEffect(() => {
+    const quality = colorMode === "quality" && evaluation ? evaluation.models : null;
+    const values = quality ? Object.values(quality).flatMap((e) => (e.quality ? [e.quality.value] : [])) : [];
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    // "Underrated" only for clear cases: at least one standard deviation above what downloads predict.
+    const residuals = quality ? Object.values(quality).flatMap((e) => (e.underrated == null ? [] : [e.underrated])) : [];
+    const sd = Math.sqrt(residuals.reduce((a, r) => a + r * r, 0) / Math.max(1, residuals.length));
+    for (const n of cache.values()) {
+      if (n.kind !== "model") continue;
+      const anim = objects.get(n.id)?.userData.anim as NodeAnim | undefined;
+      if (!anim) continue;
+      if (!quality) {
+        setTint(anim, STATUS[n.status].color);
+        setBadge(pool, anim, null);
+        continue;
+      }
+      const e = quality[n.id];
+      setTint(anim, e?.quality ? qualityColor(e.quality.value, min, max) : NO_DATA);
+      const underrated = e?.underrated != null && sd > 0 && e.underrated >= sd;
+      setBadge(pool, anim, e?.memorises ? "memorises" : underrated ? "underrated" : null);
+    }
+  }, [colorMode, evaluation, models, cache, objects, pool]);
 
   // A metrics/status update makes the node pulse once.
   useEffect(() => {

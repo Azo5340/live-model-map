@@ -11,3 +11,6 @@ frontend/public/data/
 
 # Personal scripts kept out of the public repo.
 bridge.py
+
+# Model reply texts restate the licensed problems: never committed or uploaded.
+eval/replies.jsonl

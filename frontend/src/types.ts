@@ -108,3 +108,37 @@ export interface Comparison {
   target_id: string;
   deltas: MetricDelta[];
 }
+
+/** One score on a set of problems, with its 95 % margin of error. */
+export interface EvalScore {
+  k: number;
+  n: number;
+  lo: number;
+  hi: number;
+}
+
+/** Results of the daily reasoning evaluation for one model (eval.json). */
+export interface ModelEval {
+  known: EvalScore | null;
+  modified: EvalScore | null;
+  drop: { mean: number; lo: number; hi: number } | null;
+  memorises: boolean;
+  truncated: number;
+  claimed_gsm8k: number | null;
+  quality: { value: number; lo: number | null; hi: number | null; source: "both" | "measured" | "arena" } | null;
+  underrated: number | null;
+  tied_with: string[];
+  downloads: number;
+}
+
+export interface EvalSummary {
+  generated_at: string;
+  budget_usd: number;
+  spent_usd: number;
+  problems: number;
+  scale: "arena" | "separate";
+  popularity: { spearman: number; lo: number; hi: number; n: number } | null;
+  headline: string | null;
+  names: Record<string, string>;
+  models: Record<string, ModelEval>;
+}
