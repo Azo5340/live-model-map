@@ -1,28 +1,27 @@
 @import "tailwindcss";
 
 /*
- * "Darkroom": warm near-black, a golden core, one soft hue per model family.
- * One typeface, Manrope, for everything; numbers use tabular figures.
+ * White on black: a monochrome star chart. One typeface, Manrope; numbers use tabular figures.
  */
 @theme {
   --font-sans: "Manrope Variable", Manrope, ui-sans-serif, system-ui, sans-serif;
 
-  --color-ink: #0E0A09;
-  --color-panel: #161110;
-  --color-accent: #E9A25F;
+  --color-ink: #050505;
+  --color-panel: #0D0D0D;
+  --color-accent: #FFFFFF;
 
-  /* The interface's greys, retuned from Tailwind's blue slate to warm neutrals. */
-  --color-slate-50: #FBF6F0;
-  --color-slate-100: #F3EAE0;
-  --color-slate-200: #E2D6CA;
-  --color-slate-300: #C9B9AA;
-  --color-slate-400: #A7968A;
-  --color-slate-500: #8A7A6F;
-  --color-slate-600: #64564D;
-  --color-slate-700: #3F3430;
-  --color-slate-800: #2A211D;
-  --color-slate-900: #1C1614;
-  --color-slate-950: #120E0C;
+  /* The interface's greys: neutral, no tint. */
+  --color-slate-50: #FAFAFA;
+  --color-slate-100: #F2F2F2;
+  --color-slate-200: #DCDCDC;
+  --color-slate-300: #BDBDBD;
+  --color-slate-400: #8F8F8F;
+  --color-slate-500: #707070;
+  --color-slate-600: #4F4F4F;
+  --color-slate-700: #333333;
+  --color-slate-800: #222222;
+  --color-slate-900: #161616;
+  --color-slate-950: #0C0C0C;
 }
 
 html, body, #root { height: 100%; margin: 0; }
@@ -57,8 +56,8 @@ body {
   padding: 0 !important;
 }
 .net-tip {
-  background: rgba(22, 17, 16, 0.92);
-  border: 1px solid rgba(243, 234, 224, 0.1);
+  background: rgba(13, 13, 13, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   padding: 9px 13px 10px;
   color: var(--color-slate-100);
@@ -103,8 +102,8 @@ body {
   transform: translateY(50%);
   padding: 4px 11px 4px 9px;
   border-radius: 9999px;
-  background: rgba(22, 17, 16, 0.88);
-  border: 1px solid color-mix(in srgb, var(--hue) 45%, transparent);
+  background: rgba(10, 10, 10, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--color-slate-100);
   font-family: var(--font-sans);
   white-space: nowrap;
@@ -118,7 +117,7 @@ body {
   flex: none;
   border-radius: 9999px;
   background: var(--hue);
-  box-shadow: 0 0 8px var(--hue);
+  box-shadow: 0 0 6px var(--hue);
 }
 .node-tag-text { display: flex; flex-direction: column; line-height: 1.2; }
 .node-tag-name { font-size: 11.5px; font-weight: 650; letter-spacing: -0.005em; }

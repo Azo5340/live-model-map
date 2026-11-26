@@ -5,7 +5,7 @@ const KIND_COLOR: Record<TodoKind, string> = {
   security_incident: STATUS.security_incident.color,
   down: STATUS.down.color,
   degraded: STATUS.degraded.color,
-  new_model: "#C8A15A",
+  new_model: "#FFFFFF",
 };
 
 /** What needs attention right now; items leave the list once the model is back to normal. */
@@ -29,7 +29,6 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
                 <span className="ml-auto shrink-0 text-[11px] text-slate-500">{ago(item.since)}</span>
               </div>
               <div className="truncate">{item.model_name}</div>
-              {item.detail && <div className="truncate text-xs text-slate-500">{item.detail}</div>}
             </button>
           </li>
         ))}

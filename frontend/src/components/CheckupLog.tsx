@@ -1,56 +1,27 @@
-import { ago, STATUS } from "../format";
+import { ago } from "../format";
 import type { Checkup } from "../types";
 
-export default function CheckupLog({ checkups, onSelect }: { checkups: Checkup[]; onSelect: (id: string) => void }) {
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** One line per check-up: when, and what changed. */
+export default function CheckupLog({ checkups }: { checkups: Checkup[] }) {
   return (
-    <ul className="h-full space-y-1 overflow-y-auto px-2 py-3">
-      {checkups.length === 0 && <li className="px-2 text-sm text-slate-500">No check-ups yet.</li>}
+    <ul className="h-full space-y-0.5 overflow-y-auto px-2 py-3">
+      {checkups.length === 0 && <li className="px-2 text-sm text-slate-400">No check-ups yet</li>}
       {checkups.map((c) => {
-        const ok = c.error_count === 0;
+        const changes = [
+          c.added_count > 0 && plural(c.added_count, "new model"),
+          c.status_changes.length > 0 && plural(c.status_changes.length, "status change"),
+        ].filter(Boolean);
         return (
-          <li key={c.ts} className="rounded-lg px-2 py-1.5 text-sm">
-            <div className="flex items-center gap-2 text-xs">
-              <span className={`h-2 w-2 rounded-full ${ok ? "bg-[#4fb38a]" : "bg-[#d4a948]"}`} />
-              <span className="text-slate-300">
-                {new Date(c.ts).toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })}
-              </span>
-              <span className="text-slate-500">
-                {c.initial ? "initial import" : c.full ? "full" : "quick"} · {c.duration_s.toFixed(0)} s
-              </span>
-              <span className="ml-auto text-[11px] text-slate-500">{ago(c.ts)}</span>
-            </div>
-            <div className="pl-4 text-xs text-slate-400">
-              {c.total} models · {c.checked_status} statuses checked
-              {c.added_count > 0 && <span className="text-slate-300"> · {c.added_count} new</span>}
-              {c.status_changes.length > 0 && (
-                <span className="text-accent"> · {c.status_changes.length} status change{c.status_changes.length === 1 ? "" : "s"}</span>
-              )}
-              {c.metric_changes > 0 && <span> · {c.metric_changes} update{c.metric_changes === 1 ? "" : "s"}</span>}
-            </div>
-            {c.added.map((a) => (
-              <button
-                key={a.id}
-                onClick={() => onSelect(a.id)}
-                className="block max-w-full truncate pl-4 text-left text-xs text-slate-300 hover:underline"
-              >
-                + {a.name}
-              </button>
-            ))}
-            {c.status_changes.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => onSelect(s.id)}
-                className="block max-w-full truncate pl-4 text-left text-xs hover:underline"
-                style={{ color: STATUS[s.to].color }}
-              >
-                {s.name} : {s.from ? STATUS[s.from].label : "?"} → {STATUS[s.to].label}
-              </button>
-            ))}
-            {c.errors.map((e, i) => (
-              <div key={i} className="truncate pl-4 text-xs text-[#d4a948]" title={e}>
-                ⚠ {e}
-              </div>
-            ))}
+          <li
+            key={c.ts}
+            className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm"
+            title={c.errors.length ? c.errors.join("\n") : undefined}
+          >
+            <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${c.error_count === 0 ? "bg-white/70" : "bg-[#E8B04A]"}`} />
+            <span className="min-w-0 flex-1 truncate text-slate-200">{changes.length ? changes.join(" · ") : "No change"}</span>
+            <span className="shrink-0 text-xs text-slate-400">{ago(c.ts)}</span>
           </li>
         );
       })}

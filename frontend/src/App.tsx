@@ -126,7 +126,7 @@ export default function App() {
           ☰ <span className="text-xs">To review{todo.length ? ` (${todo.length})` : ""}</span>
         </button>
         <h1 className="text-[19px] font-medium tracking-tight">
-          Live Model Map <span className="hidden font-sans text-sm font-normal text-slate-400 sm:inline">· an observatory of open models</span>
+          Live Model Map
         </h1>
         <span className="hidden text-sm text-slate-500 md:inline">
           {models.size} models · {Object.keys(providers).length} providers
@@ -177,7 +177,7 @@ export default function App() {
                 key={t.id}
                 onClick={() => setTab(t.id)}
                 className={`flex-1 whitespace-nowrap rounded-lg px-1.5 py-1 text-xs ${
-                  tab === t.id ? "bg-slate-800 text-white" : "text-slate-400 hover:text-slate-200"
+                  tab === t.id ? "bg-white/[0.08] text-white" : "text-slate-400 hover:text-white"
                 }`}
               >
                 {t.label}
@@ -187,7 +187,7 @@ export default function App() {
           <div className="min-h-0 flex-1">
             {tab === "todo" && <TodoList items={todo} onSelect={select} />}
             {tab === "events" && <EventFeed events={events} onSelect={select} />}
-            {tab === "checkups" && <CheckupLog checkups={checkups} onSelect={select} />}
+            {tab === "checkups" && <CheckupLog checkups={checkups} />}
           </div>
         </nav>
 
@@ -225,10 +225,10 @@ export default function App() {
                     onClick={() => setColorMode(mode)}
                     aria-pressed={colorMode === mode}
                     className={`rounded-lg px-2.5 py-1 ${
-                      colorMode === mode ? "bg-white/10 text-slate-100" : "text-slate-400 hover:text-slate-200"
+                      colorMode === mode ? "bg-white/[0.08] text-white" : "text-slate-400 hover:text-white"
                     }`}
                   >
-                    {mode === "status" ? "Families" : "Quality"}
+                    {mode === "status" ? "Network" : "Quality"}
                   </button>
                 ))}
               </div>
@@ -255,12 +255,10 @@ export default function App() {
                   <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: BADGE.memorises }} />
                   Drops on new numbers
                 </div>
-                <div className="mt-1 hidden border-t border-slate-800 pt-1 text-slate-400 sm:block">Size: downloads.</div>
               </div>
             ) : (
-            <div className="pointer-events-auto hidden w-[13rem] rounded-xl border border-white/5 bg-panel/90 px-3 py-2.5 text-xs sm:block">
-              <p className="leading-snug text-slate-300">One colour per family. Size shows downloads.</p>
-              <p className="mt-2 text-slate-400">Needs attention</p>
+            <div className="pointer-events-auto hidden w-[12rem] rounded-xl border border-white/10 bg-panel/90 px-3 py-2.5 text-xs sm:block">
+              <p className="text-slate-400">Needs attention</p>
               {ALERT_STATUSES.map((k) => (
                 <div key={k} className="flex items-center gap-2 py-0.5">
                   <span className="h-2.5 w-2.5 rounded-full border-2" style={{ borderColor: STATUS[k].color }} />
@@ -268,9 +266,6 @@ export default function App() {
                   <span className="ml-auto pl-3 tabular-nums text-slate-400">{statusCounts[k]}</span>
                 </div>
               ))}
-              <p className="mt-2 border-t border-white/5 pt-2 tabular-nums text-slate-400">
-                {statusCounts.operational} operational · {statusCounts.unknown} not checked
-              </p>
             </div>
             )}
             {webgl && (
@@ -294,22 +289,11 @@ export default function App() {
               (see the repository's Actions tab).
             </div>
           )}
-          {webgl && (
-            <p className="pointer-events-none absolute bottom-3 left-3 z-10 hidden text-[11px] text-slate-500 sm:block">
-              Drag: rotate · Scroll: zoom · Right-drag: pan · Click a node: focus · Esc or click empty space: global view
-            </p>
-          )}
-        </main>
+                  </main>
 
         {selected && (
           <div className="absolute inset-0 z-20 md:static md:inset-auto">
-            <SidePanel
-              model={selected}
-              models={models}
-              evaluation={evaluation}
-              onSelect={select}
-              onClose={() => setSelectedId(null)}
-            />
+            <SidePanel model={selected} evaluation={evaluation} onClose={() => setSelectedId(null)} />
           </div>
         )}
         {selectedProvider && (

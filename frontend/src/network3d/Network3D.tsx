@@ -4,7 +4,7 @@ import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { ALERT_STATUSES, fmt, GOLD, isUnderrated, NO_DATA, pct, qualityColor, STATUS, THEME, underratedThreshold } from "../format";
+import { ALERT_STATUSES, fmt, CORE, isUnderrated, NO_DATA, pct, qualityColor, STATUS, THEME, underratedThreshold } from "../format";
 import type { AIModel, EvalSummary, ModelEval, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
@@ -124,9 +124,9 @@ function clusterForce(cache: Map<string, GNode>, anchors: { current: Map<string,
 // Thin connection lines: secondary ones barely visible (5-15 %), turquoise when in focus.
 const LINE = {
   // Lines take their family's hue; the lit (focused) ones turn gold.
-  member: { opacity: 0.2 },
-  lineage: { opacity: 0.22 },
-  lit: { color: GOLD, opacity: 0.6 },
+  member: { opacity: 0.12 },
+  lineage: { opacity: 0.14 },
+  lit: { color: CORE, opacity: 0.6 },
   dim: 0.02,
 };
 
@@ -159,7 +159,7 @@ const alertLine = (s: GNode["status"]) =>
 
 function tooltip(n: GNode, quality: QualityTip): string {
   if (n.kind === "engine") {
-    return tag("Live analysis core", GOLD, ["Checks every model every 15 min"]);
+    return tag("Live analysis core", CORE, ["Checks every model every 15 min"]);
   }
   if (n.kind === "provider") {
     const count = n.modelCount ?? 0;
@@ -252,7 +252,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       setStatus(pool, anim, n.status);
     }
     for (const { mesh, link } of flows.values()) {
-      setStreamColor(mesh, cache.get(endId(link.source))?.hue ?? GOLD);
+      setStreamColor(mesh, cache.get(endId(link.source))?.hue ?? CORE);
     }
   }, [models, providers, cache, objects, flows, pool]);
 
@@ -717,7 +717,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const makeLink = useCallback(
     (l: GLink) => {
       if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
-      const hue = end(l.source)?.hue ?? GOLD;
+      const hue = end(l.source)?.hue ?? CORE;
       const provider = end(l.source)?.kind === "provider";
       // Importance shows in width and brightness: provider streams are the main
       // connections, model streams stay faint (5-15 %) until they're in focus.

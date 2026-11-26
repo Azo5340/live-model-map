@@ -1,4 +1,4 @@
-import { FAMILY, GOLD, statusOf, volumeOf } from "../format";
+import { FAMILY, CORE, statusOf, volumeOf } from "../format";
 import type { AIModel, ModelStatus, Providers } from "../types";
 
 export type NodeKind = "engine" | "provider" | "model";
@@ -120,7 +120,7 @@ export function buildGraph(
     volume: 0,
     status: "operational",
     tier: 0,
-    hue: GOLD,
+    hue: CORE,
     radius: ENGINE_RADIUS,
     fx: 0,
     fy: 0,

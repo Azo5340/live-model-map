@@ -67,8 +67,19 @@ export default function MethodPanel({ evaluation, onClose }: { evaluation: EvalS
             uses){evaluation.scale === "separate" ? "; for now too few models have both, or the two rankings don't agree well enough, so the scales are kept apart" : ""}.
           </li>
           <li>"Underrated" means scoring well above what the model's downloads would suggest.</li>
-          <li>ρ tells how closely the download ranking matches the quality ranking (1 = same order, 0 = unrelated).</li>
-          <li>Authors' own GSM8K claims are shown where the model page has one ({claimed} models).</li>
+          <li>
+            ρ tells how closely the download ranking matches the quality ranking (1 = same order, 0 = unrelated)
+            {evaluation.popularity
+              ? `: right now ρ = ${evaluation.popularity.spearman.toFixed(2)} (95% CI ${evaluation.popularity.lo.toFixed(2)} to ${evaluation.popularity.hi.toFixed(2)}, ${evaluation.popularity.n} models).`
+              : "."}
+          </li>
+          <li>
+            Authors' own GSM8K claims are shown where the model page has one ({claimed} models). They often use several
+            examples or attempts per problem; ours is one try, no examples.
+          </li>
+          <li>
+            A model's score is on the {evaluation.scale === "arena" ? "LMArena (Elo) scale" : "evaluation's own scale (0 = average of the models tested)"}.
+          </li>
         </ul>
         <h3 className="mt-4 font-medium text-slate-100">Budget</h3>
         <p>

@@ -1,19 +1,11 @@
-import { STATUS, statusOf } from "../format";
 import type { StreamEvent } from "../types";
 
 const STYLE: Record<StreamEvent["type"], { icon: string; cls: string; label: string }> = {
   MODEL_ADDED: { icon: "✦", cls: "text-slate-300", label: "New model" },
   METRICS_UPDATED: { icon: "↻", cls: "text-slate-400", label: "Metrics" },
-  STATUS_CHANGED: { icon: "●", cls: "text-accent", label: "Status change" },
+  STATUS_CHANGED: { icon: "●", cls: "text-white", label: "Status change" },
   ALERT: { icon: "⚠", cls: "text-[#d9645f]", label: "Alert" },
 };
-
-function statusText(e: StreamEvent): string | null {
-  if (e.type !== "STATUS_CHANGED" || !e.payload.model) return null;
-  const now = STATUS[statusOf(e.payload.model)];
-  const before = e.payload.previous_status ? STATUS[e.payload.previous_status].label : "?";
-  return `${before} → ${now.label}`;
-}
 
 export default function EventFeed({
   events,
@@ -48,14 +40,6 @@ export default function EventFeed({
                 </span>
               </div>
               <div className="truncate pl-5">{text}</div>
-              {statusText(e) && (
-                <div
-                  className="truncate pl-5 text-xs"
-                  style={{ color: STATUS[statusOf(e.payload.model!)].color }}
-                >
-                  {statusText(e)}
-                </div>
-              )}
             </li>
           );
         })}

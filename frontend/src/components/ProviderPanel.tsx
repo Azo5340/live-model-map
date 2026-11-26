@@ -37,7 +37,7 @@ export default function ProviderPanel({
 
   return (
     <aside className="flex h-full w-full flex-col overflow-y-auto border-l border-white/5 bg-panel md:w-[380px]">
-      <header className="flex items-center gap-3 border-b border-white/5 p-4">
+      <header className="flex items-center gap-3 p-5 pb-4">
         {avatar ? (
           <img src={avatar} alt="" className="h-11 w-11 shrink-0 rounded-full bg-white object-cover" />
         ) : (
@@ -46,46 +46,31 @@ export default function ProviderPanel({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[22px] font-medium leading-tight">{provider}</h2>
-          <div
-            className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
-            style={{ color: STATUS[worst].color, background: `${STATUS[worst].color}22` }}
-          >
+          <h2 className="truncate text-[21px] font-semibold leading-tight tracking-tight">{provider}</h2>
+          <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-white/15 px-2.5 py-0.5 text-xs">
             <span className="h-1.5 w-1.5 rounded-full" style={{ background: STATUS[worst].color }} />
-            {worst === "operational" ? "All served models operational" : `Worst status: ${STATUS[worst].label}`}
-          </div>
+            {STATUS[worst].label}
+          </span>
         </div>
         <button onClick={onClose} className="self-start text-slate-400 hover:text-white" aria-label="Close">
           ✕
         </button>
       </header>
 
-      <section className="grid grid-cols-2 gap-2 p-4 text-sm">
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Models on the map</div>
-          <div className="tabular-nums">{own.length}</div>
-        </div>
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <div className="text-[11px] text-slate-400">Downloads/day (30-day avg)</div>
-          <div className="tabular-nums">{fmt(downloads)}</div>
-        </div>
-        {elo.length > 0 && (
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <div className="text-[11px] text-slate-400">Best Elo (LMArena)</div>
-            <div className="tabular-nums">{fmt(Math.max(...elo))}</div>
+      <section className="grid grid-cols-2 gap-2 px-5 pb-5 text-sm">
+        {[
+          ["Models", String(own.length)],
+          ["Downloads/day", fmt(downloads)],
+          ...(elo.length > 0 ? [["Best Elo", fmt(Math.max(...elo))]] : []),
+        ].map(([label, value]) => (
+          <div key={label} className="rounded-xl border border-white/10 px-3 py-2.5">
+            <div className="text-[11px] text-slate-400">{label}</div>
+            <div className="mt-0.5 text-[15px] font-semibold tabular-nums">{value}</div>
           </div>
-        )}
-        <div className="col-span-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
-          {SEVERITY.filter((s) => counts[s] > 0).map((s) => (
-            <span key={s} className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full" style={{ background: STATUS[s].color }} />
-              {counts[s]} {STATUS[s].label.toLowerCase()}
-            </span>
-          ))}
-        </div>
+        ))}
       </section>
 
-      <section className="border-t border-white/5 p-4">
+      <section className="border-t border-white/10 px-5 py-4">
         <h3 className="eyebrow mb-2">Models</h3>
         <ul className="space-y-0.5">
           {own.map((m) => (
@@ -96,9 +81,7 @@ export default function ProviderPanel({
               >
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS[statusOf(m)].color }} />
                 <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                <span className="shrink-0 text-xs tabular-nums text-slate-500">
-                  {fmt(m.usage.download_count_24h)}/day
-                </span>
+                <span className="shrink-0 text-xs tabular-nums text-slate-400">{fmt(m.usage.download_count_24h)}</span>
               </button>
             </li>
           ))}

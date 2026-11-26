@@ -60,12 +60,11 @@ live-model-map/
 - **Focus**: hovering a node enlarges and brightens it, turns its direct relations' links
   turquoise and dims everything else; clicking keeps that focus and opens its panel (model or
   provider). Esc, a click in empty space or "Reset view" returns to the global view.
-- **Look**: "darkroom". Warm near-black background, a golden core, and one soft hue per model
-  family (a provider and its models share it), so clusters read like constellations. Statuses
-  don't colour the map: only models that need attention (degraded, down, security incident) get
-  a ring. Name tags are crisp HTML over the 3D view: providers show their name and model count,
-  the 12 most downloaded models a pill, and overlapping tags give way to the more important one.
-  One typeface, Manrope.
+- **Look**: white on black, like a star chart. Nodes, links, streams and the core are white;
+  colour only appears where it means something: a ring on models that need attention (degraded,
+  down, security incident) and on models that drop on new numbers. Name tags are crisp HTML over
+  the 3D view: providers show their name and model count, the 12 most downloaded models a pill,
+  and overlapping tags give way to the more important one. One typeface, Manrope.
 - **Motion**: nodes breathe and wobble slightly when a train leaves and lean toward the core while
   it travels. Rotate / zoom / pan; clicks tolerate a few pixels of mouse movement and nodes can't
   be dragged by accident.
@@ -94,10 +93,9 @@ live-model-map/
   Clicking an item flies to the model; items leave the list on their own once the model is back
   to normal.
 - **Feed**: every new model and every status or price change.
-- **Check-ups**: the history of check-up passes (duration, new models, errors).
+- **Check-ups**: one line per check-up pass, with what changed.
 - Clicking a provider logo opens the provider panel (status, totals, its models, its streams lit
-  up). Clicking a model shows its details (only the metrics our sources provide) and compares it with
-  its parent or any other model.
+  up). Clicking a model shows its key numbers (only what our sources provide) and its reasoning scores.
 
 ### Metrics
 

@@ -1,32 +1,23 @@
 import type { AIModel, Metrics, ModelEval, ModelStatus } from "./types";
 
 /**
- * "Darkroom" palette: warm near-black, a golden core, and one soft hue per model family.
+ * White on black: the map is a monochrome star chart. Colour only appears where it carries
+ * meaning (a model that needs attention, a model that drops on new numbers).
  */
 export const THEME = {
-  background: "#0E0A09",
-  panel: "#161110",
-  line: "#2A211D",
-  text: "#F3EAE0",
-  muted: "#A7968A",
-  accent: "#E9A25F",
+  background: "#050505",
+  panel: "#0D0D0D",
+  line: "#222222",
+  text: "#F5F5F5",
+  muted: "#8F8F8F",
+  accent: "#FFFFFF",
 } as const;
 
 /** The core and the light that flows into it. */
-export const GOLD = "#F2B861";
+export const CORE = "#FFFFFF";
 
-/** One hue per provider family (by download rank): soft, slightly desaturated, warm-friendly. */
-export const FAMILY = [
-  "#7CC6A4", // jade
-  "#A99BE6", // lavender
-  "#E9A25F", // amber
-  "#6FA6DE", // azure
-  "#E8DCCB", // ivory
-  "#E27D68", // coral
-  "#D58DB5", // rose
-  "#6FC2C0", // teal
-  "#C9C27A", // olive gold
-] as const;
+/** Node colour for every family: white (kept as a list so families could get hues again). */
+export const FAMILY = ["#F2F2F2"] as const;
 
 // Statuses no longer colour the map; they show as a ring only where something needs attention.
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
@@ -41,14 +32,14 @@ export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
 export const ALERT_STATUSES: ModelStatus[] = ["degraded", "down", "security_incident"];
 
 /** Quality view: models without a quality score, and the two badges. */
-export const NO_DATA = "#7c8598";
-export const BADGE = { underrated: "#F4EFE0", memorises: "#D4A24C" } as const;
+export const NO_DATA = "#333333";
+export const BADGE = { underrated: "#FFFFFF", memorises: "#E8B04A" } as const;
 
 /**
  * Quality colour scale: rises in lightness (deep blue-grey → sea green → pale lime), so weaker and
  * stronger stay apart even in greyscale, and uses none of the status colours.
  */
-export const QUALITY_RAMP = ["#2d4b5f", "#7fa3b8", "#efe7c9"] as const;
+export const QUALITY_RAMP = ["#6B6B6B", "#B3B3B3", "#FFFFFF"] as const;
 
 export function qualityColor(value: number, min: number, max: number): string {
   const t = max > min ? Math.min(1, Math.max(0, (value - min) / (max - min))) : 0.5;
