@@ -1,4 +1,5 @@
-import { FAMILY, CORE, statusOf, volumeOf } from "../format";
+import { CORE, statusOf, volumeOf } from "../format";
+import { familyHues, PLAIN } from "./logoHue";
 import type { AIModel, ModelStatus, Providers } from "../types";
 
 export type NodeKind = "engine" | "provider" | "model";
@@ -134,12 +135,8 @@ export function buildGraph(
   const maxModelVolume = Math.max(0, ...[...models.values()].map((m) => volumeOf(m) ?? 0));
   const providerTier = tiers(new Map([...byProvider].map(([p, ms]) => [p, ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0)])));
   const modelTier = tiers(new Map([...models.values()].map((m) => [m.id, volumeOf(m) ?? 0])));
-  // Families get their hue by download rank, so the biggest ones always get distinct colours.
-  const familyRank = [...byProvider]
-    .map(([p, ms]) => [p, ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0)] as const)
-    .sort((a, b) => b[1] - a[1])
-    .map(([p]) => p);
-  const hueOf = (provider: string) => FAMILY[Math.max(0, familyRank.indexOf(provider)) % FAMILY.length];
+  // A family takes the colour of its provider's logo once it has loaded; white until then.
+  const hueOf = (provider: string) => familyHues.get(provider) ?? PLAIN;
   const featured = new Set(
     [...models.values()]
       .sort((a, b) => (volumeOf(b) ?? 0) - (volumeOf(a) ?? 0))

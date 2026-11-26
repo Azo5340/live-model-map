@@ -60,9 +60,10 @@ live-model-map/
 - **Focus**: hovering a node enlarges and brightens it, turns its direct relations' links
   turquoise and dims everything else; clicking keeps that focus and opens its panel (model or
   provider). Esc, a click in empty space or "Reset view" returns to the global view.
-- **Look**: white on black, like a star chart. Nodes, links, streams and the core are white;
-  colour only appears where it means something: a ring on models that need attention (degraded,
-  down, security incident) and on models that drop on new numbers. Name tags are crisp HTML over
+- **Look**: white on black, like a star chart. Each provider with a colourful logo gives its
+  family that colour (NVIDIA green, Meta blue…), read from the logo in the browser; the others,
+  the links' defaults and the core stay white. Rings mark models that need attention (degraded,
+  down, security incident) and models that drop on new numbers. Name tags are crisp HTML over
   the 3D view: providers show their name and model count, the 12 most downloaded models a pill,
   and overlapping tags give way to the more important one. One typeface, Manrope.
 - **Motion**: nodes breathe and wobble slightly when a train leaves and lean toward the core while

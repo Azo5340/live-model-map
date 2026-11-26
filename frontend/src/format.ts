@@ -16,8 +16,6 @@ export const THEME = {
 /** The core and the light that flows into it. */
 export const CORE = "#FFFFFF";
 
-/** Node colour for every family: white (kept as a list so families could get hues again). */
-export const FAMILY = ["#F2F2F2"] as const;
 
 // Statuses no longer colour the map; they show as a ring only where something needs attention.
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
@@ -98,7 +96,7 @@ export function fmt(n: number | null | undefined, digits = 0): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
-const PROVIDER_COLORS = [...FAMILY];
+const PROVIDER_COLORS = ["#F2F2F2"];
 
 export function providerColor(provider: string): string {
   let h = 0;

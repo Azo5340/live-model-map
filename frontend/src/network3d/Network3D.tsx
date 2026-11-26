@@ -21,6 +21,7 @@ import {
   setFocus,
   setBadge,
   setStatus,
+  setTagHue,
   setTint,
   setStreamColor,
   setStreamState,
@@ -618,6 +619,30 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
     }
   }, [flows, lines, objects, cache, neighbors]);
   useEffect(refreshHighlight, [selectedId, refreshHighlight]);
+
+  // A family takes its logo's colour as soon as the logo has loaded: provider ring and glow,
+  // model dots (unless the quality view is showing), tag dots, streams and lines.
+  const colorModeRef = useRef(colorMode);
+  colorModeRef.current = colorMode;
+  useEffect(() => {
+    pool.onLogoHue = (provider, hue) => {
+      for (const n of cache.values()) {
+        if (n.kind === "engine" || n.provider !== provider) continue;
+        n.hue = hue;
+        const anim = objects.get(n.id)?.userData.anim as NodeAnim | undefined;
+        if (!anim) continue;
+        setTagHue(anim, hue);
+        if (n.kind === "provider" || colorModeRef.current !== "quality") setTint(anim, hue);
+      }
+      for (const { mesh, link } of flows.values()) {
+        if (cache.get(endId(link.source))?.provider === provider) setStreamColor(mesh, hue);
+      }
+      refreshHighlight(); // lines read their colour from the nodes
+    };
+    return () => {
+      pool.onLogoHue = undefined;
+    };
+  }, [pool, cache, objects, flows, refreshHighlight]);
 
   const onHover = useCallback(
     (n: GNode | null) => {

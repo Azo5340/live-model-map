@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
 import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { dominantHue, familyHues } from "./logoHue";
 import { ALERT_STATUSES, BADGE, CORE, STATUS, THEME } from "../format";
 import type { ModelStatus } from "../types";
 import type { GNode, Tier } from "./graphData";
@@ -139,6 +140,8 @@ export class ResourcePool {
   private owned = new Set<THREE.Material>();
   private labels = new Set<SpriteText>();
   private disposed = false;
+  /** Called when a logo's colour is known, so its family can be recoloured. */
+  onLogoHue?: (provider: string, hue: string) => void;
 
   constructor() {
     // A soft, wide falloff: diffuse halos rather than hard white blobs.
@@ -275,6 +278,12 @@ export class ResourcePool {
         ctx.strokeStyle = "rgba(5,5,5,0.6)";
         ctx.stroke();
         texture.needsUpdate = true;
+        // The family takes the logo's colour (if it has one).
+        const hue = dominantHue(img);
+        if (hue && familyHues.get(provider) !== hue) {
+          familyHues.set(provider, hue);
+          this.onLogoHue?.(provider, hue);
+        }
       };
       img.src = url;
     }
@@ -600,7 +609,14 @@ export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatu
   }
 }
 
-/** Recolors a node without changing its status (quality view, or back to the status color). */
+/** Sets the colour of a node's name tag dot. */
+export function setTagHue(anim: NodeAnim, c: string) {
+  if (anim.label instanceof CSS2DObject) {
+    (anim.label.element.firstElementChild as HTMLElement | null)?.style.setProperty("--hue", c);
+  }
+}
+
+/** Recolors a node without changing its status (quality view, or back to the family colour). */
 export function setTint(anim: NodeAnim, c: string) {
   if (anim.disc) (anim.disc.material as THREE.SpriteMaterial).color.set(c);
   if (anim.ring) (anim.ring.material as THREE.SpriteMaterial).color.set(c);
