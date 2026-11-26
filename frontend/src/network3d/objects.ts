@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import SpriteText from "three-spritetext";
-import { BADGE, STATUS, THEME } from "../format";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { ALERT_STATUSES, BADGE, GOLD, STATUS, THEME } from "../format";
 import type { ModelStatus } from "../types";
 import type { GNode, Tier } from "./graphData";
 
@@ -47,10 +48,12 @@ export interface NodeAnim {
   ring?: THREE.Sprite;
   glow?: THREE.Sprite;
   glowBase: number;
-  label?: THREE.Sprite;
+  label?: THREE.Object3D;
   /** Minor providers only show their name when in focus. */
   labelAlways: boolean;
   alert?: THREE.Sprite;
+  /** Builds the name label the first time it's needed (most labels are only shown in focus). */
+  makeLabel?: () => THREE.Object3D;
   /** Quality view badge ring ("underrated" or "memorises"). */
   badge?: THREE.Sprite;
   badgeKind?: "underrated" | "memorises";
@@ -115,7 +118,7 @@ const FLOW_FRAGMENT = /* glsl */ `
     float headlight = exp(-abs(behind) * 0.35);
     float ends = smoothstep(0.0, 0.03, vUv.y) * smoothstep(0.0, 0.03, 1.0 - vUv.y);
     float light = 0.35 + 0.9 * train + 1.1 * headlight;
-    vec3 color = mix(uColor, vec3(0.86, 0.91, 1.0), clamp(0.45 * headlight + 0.15 * train, 0.0, 1.0));
+    vec3 color = mix(uColor, vec3(1.0, 0.9, 0.74), clamp(0.45 * headlight + 0.15 * train, 0.0, 1.0));
     gl_FragColor = vec4(color * light, uOpacity * ends);
   }
 `;
@@ -239,10 +242,10 @@ export class ResourcePool {
       ctx.closePath();
     };
     disc();
-    ctx.fillStyle = "#1a2526";
+    ctx.fillStyle = "#2A211D";
     ctx.fill();
     ctx.fillStyle = THEME.text;
-    ctx.font = `500 ${TEX * 0.3}px "IBM Plex Mono", ui-monospace, monospace`;
+    ctx.font = `700 ${TEX * 0.32}px "Manrope Variable", Manrope, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(provider.replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?", TEX / 2, TEX / 2 + TEX * 0.02);
@@ -269,7 +272,7 @@ export class ResourcePool {
         ctx.restore();
         disc();
         ctx.lineWidth = 5;
-        ctx.strokeStyle = "rgba(8,13,28,0.6)";
+        ctx.strokeStyle = "rgba(14,10,9,0.6)";
         ctx.stroke();
         texture.needsUpdate = true;
       };
@@ -280,7 +283,7 @@ export class ResourcePool {
 
   label(text: string, height: number, color: string = THEME.text): SpriteText {
     const s = new SpriteText(text, height, color);
-    s.fontFace = '"IBM Plex Sans", system-ui, sans-serif';
+    s.fontFace = '"Manrope Variable", Manrope, system-ui, sans-serif';
     s.fontWeight = "500";
     s.backgroundColor = false;
     s.padding = 0;
@@ -330,12 +333,11 @@ export class ResourcePool {
 /** Opacity of a dimmed (out-of-focus) node. */
 export const DIMMED = 0.16;
 
-const color = (s: ModelStatus) => STATUS[s].color;
 
 // Glow strength by tier: more important nodes glow more, minor ones barely.
 const GLOW = {
   provider: { opacity: [0.24, 0.15, 0.08], scale: [2.7, 2.45, 2.2] },
-  model: { opacity: [0.22, 0.12, 0.06], scale: [2.8, 2.5, 2.2] },
+  model: { opacity: [0.36, 0.24, 0.15], scale: [3.2, 2.9, 2.6] },
 };
 
 function baseAnim(kind: GNode["kind"], node: GNode, body: THREE.Group): NodeAnim {
@@ -366,15 +368,54 @@ function fadeable(anim: NodeAnim, m: THREE.SpriteMaterial) {
   anim.fadeables.push({ m, base: m.opacity });
 }
 
-/** A ring that slowly breathes around security incidents. */
-function alertRing(pool: ResourcePool, anim: NodeAnim) {
-  const m = pool.own(glowMaterial(pool.ringTexture(10), STATUS.security_incident.color, 0.75));
+/** A ring that slowly breathes around a node that needs attention (degraded, down, security). */
+function alertRing(pool: ResourcePool, anim: NodeAnim, status: ModelStatus) {
+  const m = pool.own(glowMaterial(pool.ringTexture(10), STATUS[status].color, 0.8));
   const s = new THREE.Sprite(m);
   s.scale.setScalar(2.7);
   noPick(s);
   fadeable(anim, m);
   return s;
 }
+
+/**
+ * A name tag hanging just under a node: real HTML laid over the 3D view (crisp text, outside
+ * the bloom), with a dot in the family hue, the name, and optionally one line underneath.
+ */
+function nodeTag(anim: NodeAnim, title: string, sub: string | null, hue: string, kind: "provider" | "model" | "core") {
+  const el = document.createElement("div");
+  el.className = `node-tag node-tag-${kind}`;
+  el.style.setProperty("--hue", hue);
+  const dot = document.createElement("span");
+  dot.className = "node-tag-dot";
+  const text = document.createElement("span");
+  text.className = "node-tag-text";
+  const name = document.createElement("span");
+  name.className = "node-tag-name";
+  name.textContent = title;
+  text.append(name);
+  if (sub) {
+    const line = document.createElement("span");
+    line.className = "node-tag-sub";
+    line.textContent = sub;
+    text.append(line);
+  }
+  el.append(dot, text);
+  const wrap = document.createElement("div"); // CSS2DRenderer centres this box on the anchor
+  wrap.className = "node-tag-anchor";
+  wrap.append(el);
+  const tag = new CSS2DObject(wrap);
+  tag.position.y = kind === "core" ? -1.5 : -1.12;
+  anim.body.add(tag);
+  return tag;
+}
+
+/** An HTML tag isn't removed from the page with its node's group: take it out explicitly. */
+function removeTag(anim: NodeAnim) {
+  if (anim.label instanceof CSS2DObject) anim.label.element.remove();
+}
+
+const isAlert = (s: ModelStatus) => ALERT_STATUSES.includes(s);
 
 /** Makes a node wobble like a drop of fluid (and brighten briefly). */
 export function kick(anim: NodeAnim, strength: number) {
@@ -389,36 +430,34 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
 
   // A diffuse electric-blue core: no pure white, a gradual falloff into the
   // network, so it stays the focal point without washing out the center.
-  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.brass, 0.34)));
+  const halo = new THREE.Sprite(pool.own(glowMaterial(pool.glow, GOLD, 0.26)));
   halo.scale.setScalar(4.6);
-  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, THEME.steel, 0.1)));
+  const nebula = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#C9773E", 0.08)));
   nebula.scale.setScalar(7);
-  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#d9b878", 0.28)));
+  const aura = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#F5C27A", 0.24)));
   aura.scale.setScalar(2.5);
-  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#e3cfa0", 0.12)));
+  const rays = new THREE.Sprite(pool.own(glowMaterial(pool.starburst(), "#F7CF8E", 0.1)));
   rays.scale.setScalar(4.4);
-  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#f3ead2", 0.7)));
+  const heart = new THREE.Sprite(pool.own(glowMaterial(pool.glow, "#FFE6C2", 0.62)));
   heart.scale.setScalar(1.15);
-  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), THEME.brass, 0.45)));
+  const edge = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), GOLD, 0.4)));
   edge.scale.setScalar(2.2);
-  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(4), "#e3cfa0", 0.3)));
+  const inner = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(4), "#F7CF8E", 0.26)));
   inner.scale.setScalar(1.35);
-  const label = pool.label("LIVE ANALYSIS CORE", 0.13, THEME.text);
-  label.material.opacity = 0.75;
-  label.position.y = -1.75;
 
   // Ripples spread out from the core when trains arrive.
   const ripples = Array.from({ length: 4 }, () => {
-    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), "#d9b878", 0)));
+    const r = new THREE.Sprite(pool.own(glowMaterial(pool.ringTexture(5), "#F5C27A", 0)));
     r.visible = false;
     r.userData.age = 1;
     return r;
   });
 
-  noPick(nebula, halo, rays, aura, edge, inner, label, ...ripples);
-  body.add(nebula, halo, rays, aura, edge, inner, heart, label, ...ripples);
+  noPick(nebula, halo, rays, aura, edge, inner, ...ripples);
+  body.add(nebula, halo, rays, aura, edge, inner, heart, ...ripples);
 
   const anim = baseAnim("engine", node, body);
+  anim.label = nodeTag(anim, "Live analysis core", "Hugging Face · OpenRouter · LMArena", GOLD, "core");
   let energy = 0.3;
   let sinceRipple = 0;
   let next = 0;
@@ -435,11 +474,11 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
     energy = Math.max(0.25, energy * Math.exp(-0.9 * dt));
     sinceRipple += dt;
     const breathe = motion ? Math.sin(t * 1.2) : 0;
-    (halo.material as THREE.SpriteMaterial).opacity = 0.3 + 0.16 * energy + 0.03 * breathe;
-    (aura.material as THREE.SpriteMaterial).opacity = 0.3 + 0.16 * energy;
+    (halo.material as THREE.SpriteMaterial).opacity = 0.22 + 0.12 * energy + 0.03 * breathe;
+    (aura.material as THREE.SpriteMaterial).opacity = 0.22 + 0.12 * energy;
     (rays.material as THREE.SpriteMaterial).opacity = 0.08 + 0.1 * energy;
     heart.scale.setScalar(1.05 + 0.2 * energy + 0.04 * breathe);
-    halo.scale.setScalar(5 + 0.9 * energy + 0.15 * breathe);
+    halo.scale.setScalar(6 + 1 * energy + 0.15 * breathe);
     if (motion) (rays.material as THREE.SpriteMaterial).rotation = t * 0.03;
     inner.scale.setScalar(1.35 + 0.06 * breathe);
     for (const r of ripples) {
@@ -454,6 +493,7 @@ export function createEngine(pool: ResourcePool, node: GNode): THREE.Group {
       (r.material as THREE.SpriteMaterial).opacity = 0.32 * (1 - age) * (1 - age);
     }
   };
+  group.userData.dispose = () => removeTag(anim);
   group.userData.anim = anim;
   return group;
 }
@@ -464,7 +504,7 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   group.add(body);
   const anim = baseAnim("provider", node, body);
 
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), GLOW.provider.opacity[node.tier]));
+  const glowMat = pool.own(glowMaterial(pool.glow, node.hue, GLOW.provider.opacity[node.tier]));
   const glow = new THREE.Sprite(glowMat);
   glow.scale.setScalar(GLOW.provider.scale[node.tier]);
   const logoMat = pool.own(
@@ -474,31 +514,33 @@ export function createProvider(pool: ResourcePool, node: GNode): THREE.Group {
   const logo = new THREE.Sprite(logoMat);
   logo.scale.setScalar(2);
   logo.renderOrder = 2;
-  const ringMat = pool.own(glowMaterial(pool.ringTexture(9), color(node.status), 0.85));
+  const ringMat = pool.own(glowMaterial(pool.ringTexture(6), node.hue, 0.7));
   const ring = new THREE.Sprite(ringMat);
-  ring.scale.setScalar(2.22);
+  ring.scale.setScalar(2.2);
   ring.renderOrder = 3;
-  const label = pool.label(node.name, 0.26, THEME.text);
-  label.material.opacity = 0.82;
-  label.position.y = -1.55;
-  label.renderOrder = 3;
-  // Minor providers keep their name for when they're in focus, to avoid label clutter.
-  anim.labelAlways = node.tier === 0; // only the main providers are named at the global zoom
-  label.visible = anim.labelAlways;
 
-  noPick(glow, ring, label);
-  body.add(glow, logo, ring, label);
+  noPick(glow, ring);
+  body.add(glow, logo, ring);
 
   anim.ring = ring;
   anim.glow = glow;
   anim.glowBase = glowMat.opacity;
-  anim.label = label;
-  for (const m of [glowMat, logoMat, ringMat, label.material]) fadeable(anim, m);
-  if (node.status === "security_incident") {
-    anim.alert = alertRing(pool, anim);
+  for (const m of [glowMat, logoMat, ringMat]) fadeable(anim, m);
+  // Name tag: the name, and underneath only what matters (how many models).
+  // Main providers always show it; the others when they're in focus.
+  const count = node.modelCount ?? 0;
+  anim.makeLabel = () =>
+    nodeTag(anim, node.name, `${count} model${count === 1 ? "" : "s"}`, node.hue, "provider");
+  anim.labelAlways = node.tier === 0;
+  if (anim.labelAlways) anim.label = anim.makeLabel();
+  if (isAlert(node.status)) {
+    anim.alert = alertRing(pool, anim, node.status);
     body.add(anim.alert);
   }
-  group.userData.dispose = () => [glowMat, logoMat, ringMat].forEach((m) => pool.release(m));
+  group.userData.dispose = () => {
+    [glowMat, logoMat, ringMat, anim.alert?.material].forEach((m) => m && pool.release(m as THREE.Material));
+    removeTag(anim);
+  };
   group.userData.anim = anim;
   return group;
 }
@@ -509,11 +551,11 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   group.add(body);
   const anim = baseAnim("model", node, body);
 
-  const glowMat = pool.own(glowMaterial(pool.glow, color(node.status), GLOW.model.opacity[node.tier]));
+  const glowMat = pool.own(glowMaterial(pool.glow, node.hue, GLOW.model.opacity[node.tier]));
   const glow = new THREE.Sprite(glowMat);
   glow.scale.setScalar(GLOW.model.scale[node.tier]);
   const orbMat = pool.own(
-    new THREE.SpriteMaterial({ map: pool.orbTexture(), color: new THREE.Color(color(node.status)), transparent: true, depthWrite: false }),
+    new THREE.SpriteMaterial({ map: pool.orbTexture(), color: new THREE.Color(node.hue), transparent: true, depthWrite: false }),
   );
   const disc = new THREE.Sprite(orbMat);
   disc.scale.setScalar(2);
@@ -525,11 +567,18 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
   anim.glow = glow;
   anim.glowBase = glowMat.opacity;
   for (const m of [glowMat, orbMat]) fadeable(anim, m);
-  if (node.status === "security_incident") {
-    anim.alert = alertRing(pool, anim);
+  // The most downloaded models always show their name in a pill; the others only in focus.
+  anim.makeLabel = () => nodeTag(anim, node.name, null, node.hue, "model");
+  anim.labelAlways = !!node.featured;
+  if (anim.labelAlways) anim.label = anim.makeLabel();
+  if (isAlert(node.status)) {
+    anim.alert = alertRing(pool, anim, node.status);
     body.add(anim.alert);
   }
-  group.userData.dispose = () => [glowMat, orbMat].forEach((m) => pool.release(m));
+  group.userData.dispose = () => {
+    [glowMat, orbMat, anim.alert?.material].forEach((m) => m && pool.release(m as THREE.Material));
+    removeTag(anim);
+  };
   group.userData.anim = anim;
   return group;
 }
@@ -538,18 +587,16 @@ export function createModel(pool: ResourcePool, node: GNode): THREE.Group {
 export function setStatus(pool: ResourcePool, anim: NodeAnim, status: ModelStatus) {
   if (anim.status === status) return;
   anim.status = status;
-  const c = color(status);
-  if (anim.disc) (anim.disc.material as THREE.SpriteMaterial).color.set(c);
-  if (anim.ring) (anim.ring.material as THREE.SpriteMaterial).color.set(c);
-  if (anim.glow) (anim.glow.material as THREE.SpriteMaterial).color.set(c);
-  if (status === "security_incident" && !anim.alert) {
-    anim.alert = alertRing(pool, anim);
-    anim.body.add(anim.alert);
-  } else if (status !== "security_incident" && anim.alert) {
+  // Colours belong to the family; a status only adds or removes the attention ring.
+  if (anim.alert) {
     anim.body.remove(anim.alert);
     anim.fadeables = anim.fadeables.filter((f) => f.m !== anim.alert!.material);
     pool.release(anim.alert.material);
     anim.alert = undefined;
+  }
+  if (isAlert(status)) {
+    anim.alert = alertRing(pool, anim, status);
+    anim.body.add(anim.alert);
   }
 }
 
@@ -584,6 +631,7 @@ export function setBadge(pool: ResourcePool, anim: NodeAnim, badge: "underrated"
 /** Focus state of a node: in focus, dimmed, or neutral (no focus anywhere). */
 export function setFocus(anim: NodeAnim, visible: boolean, labelled: boolean) {
   anim.fadeTarget = visible ? 1 : DIMMED;
+  if (labelled && !anim.label && anim.makeLabel) anim.label = anim.makeLabel();
   if (anim.label && !anim.labelAlways) anim.label.visible = labelled;
 }
 
@@ -626,6 +674,7 @@ export function animateNode(anim: NodeAnim, t: number, dt: number, motion: boole
   if (fadeMoving) anim.fade += (anim.fadeTarget - anim.fade) * Math.min(1, dt * 7);
   if (fadeMoving) {
     for (const { m, base } of anim.fadeables) m.opacity = base * anim.fade;
+    if (anim.label instanceof CSS2DObject) anim.label.element.style.opacity = String(anim.fade);
   }
   // The glow carries hover emphasis and the brief flash when a train leaves.
   if (anim.glow) {
@@ -676,7 +725,7 @@ export function setStreamState(mesh: THREE.Mesh, state: StreamState) {
   const u = (mesh.material as THREE.ShaderMaterial).uniforms;
   const base = mesh.userData.opacity as number;
   u.uOpacity.value = state === "lit" ? Math.min(0.9, base * 2.5 + 0.35) : state === "dim" ? base * 0.25 : base;
-  u.uColor.value.set(state === "lit" ? THEME.brass : (mesh.userData.color as string));
+  u.uColor.value.set(state === "lit" ? GOLD : (mesh.userData.color as string));
 }
 
 /** Stretches a stream between two points, stopping at the nodes' edges. */

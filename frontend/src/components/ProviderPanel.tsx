@@ -46,7 +46,7 @@ export default function ProviderPanel({
           </div>
         )}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-serif text-[22px] font-medium leading-tight">{provider}</h2>
+          <h2 className="truncate text-[22px] font-medium leading-tight">{provider}</h2>
           <div
             className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
             style={{ color: STATUS[worst].color, background: `${STATUS[worst].color}22` }}
@@ -61,18 +61,18 @@ export default function ProviderPanel({
       </header>
 
       <section className="grid grid-cols-2 gap-2 p-4 text-sm">
-        <div className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
           <div className="text-[11px] text-slate-400">Models on the map</div>
-          <div className="font-mono tabular-nums">{own.length}</div>
+          <div className="tabular-nums">{own.length}</div>
         </div>
-        <div className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
           <div className="text-[11px] text-slate-400">Downloads/day (30-day avg)</div>
-          <div className="font-mono tabular-nums">{fmt(downloads)}</div>
+          <div className="tabular-nums">{fmt(downloads)}</div>
         </div>
         {elo.length > 0 && (
-          <div className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
             <div className="text-[11px] text-slate-400">Best Elo (LMArena)</div>
-            <div className="font-mono tabular-nums">{fmt(Math.max(...elo))}</div>
+            <div className="tabular-nums">{fmt(Math.max(...elo))}</div>
           </div>
         )}
         <div className="col-span-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400">
@@ -92,11 +92,11 @@ export default function ProviderPanel({
             <li key={m.id}>
               <button
                 onClick={() => onSelect(m.id)}
-                className="flex w-full items-center gap-2 rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-white/5"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
               >
                 <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: STATUS[statusOf(m)].color }} />
                 <span className="min-w-0 flex-1 truncate">{m.name}</span>
-                <span className="shrink-0 text-xs font-mono tabular-nums text-slate-500">
+                <span className="shrink-0 text-xs tabular-nums text-slate-500">
                   {fmt(m.usage.download_count_24h)}/day
                 </span>
               </button>

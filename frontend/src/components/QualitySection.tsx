@@ -99,7 +99,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
       <dt className="text-slate-400">{label}</dt>
-      <dd className="text-right font-mono tabular-nums text-slate-200">{value}</dd>
+      <dd className="text-right tabular-nums text-slate-200">{value}</dd>
     </div>
   );
 }

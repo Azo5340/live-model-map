@@ -43,7 +43,7 @@ export default function SidePanel({
           style={{ background: STATUS[statusOf(model)].color }}
         />
         <div className="min-w-0 flex-1">
-          <h2 className="truncate font-serif text-[22px] font-medium leading-tight">{model.name}</h2>
+          <h2 className="truncate text-[22px] font-medium leading-tight">{model.name}</h2>
           <p className="text-sm text-slate-400">
             {model.provider}
             {model.release_date ? ` · released ${model.release_date}` : ""}
@@ -90,21 +90,21 @@ export default function SidePanel({
         {(Object.keys(METRIC_LABELS) as (keyof Metrics)[])
           .filter((k) => model.metrics[k] != null)
           .map((k) => (
-            <div key={k} className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+            <div key={k} className="rounded-lg bg-slate-800/60 px-3 py-2">
               <div className="text-[11px] text-slate-400">{METRIC_LABELS[k]}</div>
-              <div className="font-mono tabular-nums">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
+              <div className="tabular-nums">{fmt(model.metrics[k], k === "cost_per_1k_tokens" ? 4 : 1)}</div>
             </div>
           ))}
         {model.usage.download_count_24h != null && (
-          <div className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
             <div className="text-[11px] text-slate-400">Downloads/day (30-day avg)</div>
-            <div className="font-mono tabular-nums">{fmt(model.usage.download_count_24h)}</div>
+            <div className="tabular-nums">{fmt(model.usage.download_count_24h)}</div>
           </div>
         )}
         {model.usage.active_requests_est != null && (
-          <div className="rounded-[3px] bg-slate-800/60 px-3 py-2">
+          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
             <div className="text-[11px] text-slate-400">Active requests (est.)</div>
-            <div className="font-mono tabular-nums">{fmt(model.usage.active_requests_est)}</div>
+            <div className="tabular-nums">{fmt(model.usage.active_requests_est)}</div>
           </div>
         )}
         <p className="col-span-2 text-[11px] leading-snug text-slate-500">
@@ -126,7 +126,7 @@ export default function SidePanel({
           Compare with
         </label>
         <select
-          className="w-full rounded-[3px] border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
+          className="w-full rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm"
           value={targetId ?? ""}
           onChange={(e) => setTargetId(e.target.value || null)}
         >
@@ -170,19 +170,19 @@ export default function SidePanel({
                     layout="vertical"
                     data={[
                       { name: model.name, v: model.metrics[k] ?? 0, c: providerColor(model.provider) },
-                      { name: target.name, v: target.metrics[k] ?? 0, c: "#56625F" },
+                      { name: target.name, v: target.metrics[k] ?? 0, c: "#64564D" },
                     ]}
                     margin={{ left: 0, right: 16 }}
                   >
                     <XAxis type="number" hide />
-                    <YAxis type="category" dataKey="name" width={110} tick={{ fill: "#959E99", fontSize: 11, fontFamily: "IBM Plex Mono" }} />
+                    <YAxis type="category" dataKey="name" width={110} tick={{ fill: "#A7968A", fontSize: 11 }} />
                     <Tooltip
                       cursor={{ fill: "rgba(255,255,255,0.04)" }}
-                      contentStyle={{ background: "#111A1B", border: "1px solid #223031", fontFamily: "IBM Plex Mono", fontSize: 12 }}
+                      contentStyle={{ background: "#161110", border: "1px solid #2A211D", borderRadius: 10, fontSize: 12 }}
                     />
                     <Bar dataKey="v" radius={[0, 4, 4, 0]} isAnimationActive>
                       {[0, 1].map((i) => (
-                        <Cell key={i} fill={i === 0 ? providerColor(model.provider) : "#56625F"} />
+                        <Cell key={i} fill={i === 0 ? providerColor(model.provider) : "#64564D"} />
                       ))}
                     </Bar>
                   </BarChart>

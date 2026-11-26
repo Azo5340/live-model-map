@@ -1,4 +1,4 @@
-import { statusOf, volumeOf } from "../format";
+import { FAMILY, GOLD, statusOf, volumeOf } from "../format";
 import type { AIModel, ModelStatus, Providers } from "../types";
 
 export type NodeKind = "engine" | "provider" | "model";
@@ -17,6 +17,10 @@ export interface GNode {
   status: ModelStatus;
   /** Visual hierarchy: 0 = main, 1 = secondary, 2 = minor (by real download rank within its kind). */
   tier: Tier;
+  /** Family colour: a provider and all its models share one hue. */
+  hue: string;
+  /** One of the most downloaded models: always shows its name. */
+  featured?: boolean;
   radius: number;
   // Filled in by the force simulation.
   x?: number;
@@ -43,6 +47,9 @@ export const ENGINE_ID = "__engine__";
 export const ENGINE_RADIUS = 56;
 
 export type Tier = 0 | 1 | 2;
+
+/** How many of the most downloaded models are always named on the map. */
+const FEATURED_MODELS = 12;
 
 // Three sizes per kind instead of a continuous scale, so the hierarchy reads at a
 // glance; the smallest provider size still keeps logos recognisable.
@@ -113,6 +120,7 @@ export function buildGraph(
     volume: 0,
     status: "operational",
     tier: 0,
+    hue: GOLD,
     radius: ENGINE_RADIUS,
     fx: 0,
     fy: 0,
@@ -126,6 +134,18 @@ export function buildGraph(
   const maxModelVolume = Math.max(0, ...[...models.values()].map((m) => volumeOf(m) ?? 0));
   const providerTier = tiers(new Map([...byProvider].map(([p, ms]) => [p, ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0)])));
   const modelTier = tiers(new Map([...models.values()].map((m) => [m.id, volumeOf(m) ?? 0])));
+  // Families get their hue by download rank, so the biggest ones always get distinct colours.
+  const familyRank = [...byProvider]
+    .map(([p, ms]) => [p, ms.reduce((s, m) => s + (volumeOf(m) ?? 0), 0)] as const)
+    .sort((a, b) => b[1] - a[1])
+    .map(([p]) => p);
+  const hueOf = (provider: string) => FAMILY[Math.max(0, familyRank.indexOf(provider)) % FAMILY.length];
+  const featured = new Set(
+    [...models.values()]
+      .sort((a, b) => (volumeOf(b) ?? 0) - (volumeOf(a) ?? 0))
+      .slice(0, FEATURED_MODELS)
+      .map((m) => m.id),
+  );
 
   for (const [provider, ms] of byProvider) {
     const pid = `provider:${provider}`;
@@ -141,6 +161,7 @@ export function buildGraph(
         modelCount: ms.length,
         status: worst(ms.map(statusOf)),
         tier: providerTier.get(provider) ?? 2,
+        hue: hueOf(provider),
         radius: TIER_RADIUS.provider[providerTier.get(provider) ?? 2],
       }),
     );
@@ -164,6 +185,8 @@ export function buildGraph(
           volume: volumeM,
           status: statusOf(m),
           tier: modelTier.get(m.id) ?? 2,
+          hue: hueOf(provider),
+          featured: featured.has(m.id),
           radius: TIER_RADIUS.model[modelTier.get(m.id) ?? 2],
         }),
       );

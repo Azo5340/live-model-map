@@ -18,7 +18,7 @@ export default function FindingsCard({ evaluation, onOpenMethod }: { evaluation:
   return (
     <div data-findings className="border-b border-slate-800 p-3 text-xs leading-snug">
       <p className="eyebrow mb-1.5">Finding</p>
-      <p className="font-serif text-[17px] leading-snug text-slate-100">{evaluation.headline ?? "Not enough data yet for a clear finding."}</p>
+      <p className="text-[17px] leading-snug text-slate-100">{evaluation.headline ?? "Not enough data yet for a clear finding."}</p>
       {p && (
         <p className="mt-1.5 text-slate-300">
           {verdict(p)}{" "}
@@ -33,7 +33,7 @@ export default function FindingsCard({ evaluation, onOpenMethod }: { evaluation:
       </p>
       <button
         onClick={onOpenMethod}
-        className="mt-1.5 font-medium text-brass underline-offset-2 hover:underline focus-visible:underline"
+        className="mt-1.5 font-medium text-accent underline-offset-2 hover:underline focus-visible:underline"
       >
         How it's measured →
       </button>

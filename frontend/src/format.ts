@@ -1,29 +1,44 @@
 import type { AIModel, Metrics, ModelEval, ModelStatus } from "./types";
 
 /**
- * "Observatory log" palette: green-black ink, bone text, aged brass for anything you can
- * interact with, verdigris for healthy instruments, steel for structure.
+ * "Darkroom" palette: warm near-black, a golden core, and one soft hue per model family.
  */
 export const THEME = {
-  background: "#0B1112",
-  panel: "#111A1B",
-  line: "#223031",
-  text: "#E7E2D4",
-  muted: "#959E99",
-  brass: "#C8A15A",
-  verdigris: "#5FA191",
-  steel: "#6F8C9B",
+  background: "#0E0A09",
+  panel: "#161110",
+  line: "#2A211D",
+  text: "#F3EAE0",
+  muted: "#A7968A",
+  accent: "#E9A25F",
 } as const;
 
-// Muted, earthy states: verdigris when healthy, neutral slate when nothing is known,
-// warm tones only where something needs attention.
+/** The core and the light that flows into it. */
+export const GOLD = "#F2B861";
+
+/** One hue per provider family (by download rank): soft, slightly desaturated, warm-friendly. */
+export const FAMILY = [
+  "#7CC6A4", // jade
+  "#A99BE6", // lavender
+  "#E9A25F", // amber
+  "#6FA6DE", // azure
+  "#E8DCCB", // ivory
+  "#E27D68", // coral
+  "#D58DB5", // rose
+  "#6FC2C0", // teal
+  "#C9C27A", // olive gold
+] as const;
+
+// Statuses no longer colour the map; they show as a ring only where something needs attention.
 export const STATUS: Record<ModelStatus, { color: string; label: string }> = {
-  operational: { color: THEME.verdigris, label: "Operational" },
-  degraded: { color: "#D4A24C", label: "Degraded" },
-  down: { color: "#C75B47", label: "Down" },
-  security_incident: { color: "#C96B92", label: "Security incident" },
-  unknown: { color: "#6E7A7D", label: "Unknown" },
+  operational: { color: "#7CC6A4", label: "Operational" },
+  degraded: { color: "#E8B04A", label: "Degraded" },
+  down: { color: "#E5624E", label: "Down" },
+  security_incident: { color: "#D978B5", label: "Security incident" },
+  unknown: { color: "#8C7E76", label: "Unknown" },
 };
+
+/** Statuses that get a ring on the map. */
+export const ALERT_STATUSES: ModelStatus[] = ["degraded", "down", "security_incident"];
 
 /** Quality view: models without a quality score, and the two badges. */
 export const NO_DATA = "#7c8598";
@@ -92,7 +107,7 @@ export function fmt(n: number | null | undefined, digits = 0): string {
   return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
-const PROVIDER_COLORS = ["#C8A15A", "#5FA191", "#7FA3B8", "#B98A6E", "#A3A27A", "#8E86A8", "#6FA0A0"];
+const PROVIDER_COLORS = [...FAMILY];
 
 export function providerColor(provider: string): string {
   let h = 0;

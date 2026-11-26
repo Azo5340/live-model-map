@@ -20,7 +20,7 @@ export default function TodoList({ items, onSelect }: { items: TodoItem[]; onSel
         {items.map((item) => (
           <li key={item.id}>
             <button
-              className="block w-full rounded-[3px] px-2 py-1.5 text-left text-sm hover:bg-white/5"
+              className="block w-full rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
               onClick={() => onSelect(item.model_id)}
             >
               <div className="flex items-center gap-1.5 text-xs">

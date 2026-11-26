@@ -3,7 +3,8 @@ import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useMemo,
 import ForceGraph3D, { type ForceGraphMethods } from "react-force-graph-3d";
 import * as THREE from "three";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { fmt, isUnderrated, NO_DATA, pct, qualityColor, STATUS, THEME, underratedThreshold } from "../format";
+import { CSS2DRenderer } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { ALERT_STATUSES, fmt, GOLD, isUnderrated, NO_DATA, pct, qualityColor, STATUS, THEME, underratedThreshold } from "../format";
 import type { AIModel, EvalSummary, ModelEval, Providers } from "../types";
 import { buildGraph, ENGINE_ID, ENGINE_RADIUS, structureKey, type GLink, type GNode } from "./graphData";
 import {
@@ -122,9 +123,10 @@ function clusterForce(cache: Map<string, GNode>, anchors: { current: Map<string,
 
 // Thin connection lines: secondary ones barely visible (5-15 %), turquoise when in focus.
 const LINE = {
-  member: { color: THEME.steel, opacity: 0.08 },
-  lineage: { color: THEME.muted, opacity: 0.07 },
-  lit: { color: THEME.brass, opacity: 0.6 },
+  // Lines take their family's hue; the lit (focused) ones turn gold.
+  member: { opacity: 0.2 },
+  lineage: { opacity: 0.22 },
+  lit: { color: GOLD, opacity: 0.6 },
   dim: 0.02,
 };
 
@@ -133,49 +135,48 @@ const escapeHtml = (s: string) =>
 
 type QualityTip = { models: Record<string, ModelEval>; threshold: number } | null;
 
-const row = (key: string, value: string) => `<dt>${key}</dt><dd>${value}</dd>`;
-const dot = (color: string) => `<span class="net-tip-dot" style="background:${color}"></span>`;
-const card = (name: string, kind: string, rows: string[]) =>
-  `<div class="net-tip"><div class="net-tip-name">${escapeHtml(name)}</div>` +
-  `<div class="net-tip-kind">${kind}</div><dl class="net-tip-rows">${rows.join("")}</dl></div>`;
+/** Hover tag: the name, and underneath only the key facts. */
+const tag = (name: string, hue: string, lines: string[]) =>
+  `<div class="net-tip"><div class="net-tip-name"><span class="net-tip-dot" style="background:${hue}"></span>${escapeHtml(name)}</div>` +
+  lines.map((l) => `<div class="net-tip-sub">${l}</div>`).join("") +
+  `</div>`;
 
 /** In the quality view, what the evaluation measured for a model. */
-function qualityRows(e: ModelEval | undefined, threshold: number): string[] {
-  if (!e?.quality) return [row("reasoning", "not tested")];
-  const rows = [];
-  if (e.known) rows.push(row("known problems", pct(e.known.k / e.known.n)));
-  if (e.modified) rows.push(row("new numbers", pct(e.modified.k / e.modified.n)));
-  if (!e.known) rows.push(row("reasoning", "LMArena only"));
-  if (e.memorises) rows.push(row("flag", "drops on new numbers"));
-  else if (isUnderrated(e, threshold)) rows.push(row("flag", "underrated"));
-  return rows;
+function qualityLine(e: ModelEval | undefined, threshold: number): string {
+  if (!e?.quality) return "Reasoning not tested yet";
+  if (!e.known) return "Reasoning: LMArena only";
+  const parts = [`Known ${pct(e.known.k / e.known.n)}`];
+  if (e.modified) parts.push(`new numbers ${pct(e.modified.k / e.modified.n)}`);
+  if (e.memorises) parts.push("drops on new numbers");
+  else if (isUnderrated(e, threshold)) parts.push("underrated");
+  return parts.join(" · ");
 }
 
-/** Hover card: a catalogue entry, name first, then the measurements. */
+const alertLine = (s: GNode["status"]) =>
+  ALERT_STATUSES.includes(s)
+    ? `<span class="net-tip-alert" style="color:${STATUS[s].color}">${STATUS[s].label}</span>`
+    : null;
+
 function tooltip(n: GNode, quality: QualityTip): string {
-  const status = STATUS[n.status];
-  const state = `${dot(status.color)}${status.label.toLowerCase()}`;
   if (n.kind === "engine") {
-    return card("Live analysis core", "Check-up every 15 min", [
-      row("sources", "Hugging Face, OpenRouter, LMArena"),
-    ]);
+    return tag("Live analysis core", GOLD, ["Checks every model every 15 min"]);
   }
   if (n.kind === "provider") {
-    return card(n.name, `Provider · ${n.modelCount} model${n.modelCount === 1 ? "" : "s"}`, [
-      row("downloads/day", fmt(n.volume)),
-      row("worst status", state),
+    const count = n.modelCount ?? 0;
+    return tag(n.name, n.hue, [
+      `${count} model${count === 1 ? "" : "s"} · ${fmt(n.volume)} downloads/day`,
+      ...[alertLine(n.status)].filter((x): x is string => !!x),
     ]);
   }
   const m = n.model!;
-  const rows = [row("downloads/day", fmt(m.usage.download_count_24h))];
-  if (quality) {
-    rows.push(...qualityRows(quality.models[m.id], quality.threshold));
-  } else {
-    rows.push(row("status", state));
-    if (m.metrics.elo_score != null) rows.push(row("Elo", fmt(m.metrics.elo_score)));
-    if (m.metrics.availability_pct != null) rows.push(row("availability", `${fmt(m.metrics.availability_pct)}%`));
+  const lines = [`${escapeHtml(m.provider)} · ${fmt(m.usage.download_count_24h)} downloads/day`];
+  if (quality) lines.push(escapeHtml(qualityLine(quality.models[m.id], quality.threshold)));
+  else {
+    const alert = alertLine(n.status);
+    if (alert) lines.push(alert);
+    else if (m.metrics.elo_score != null) lines.push(`Elo ${fmt(m.metrics.elo_score)}`);
   }
-  return card(m.name, `Model · ${escapeHtml(m.provider)}`, rows);
+  return tag(m.name, n.hue, lines);
 }
 
 const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
@@ -183,6 +184,12 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   ref,
 ) {
   const fgRef = useRef<ForceGraphMethods<GNode, GLink> | undefined>(undefined);
+  // Name tags are HTML laid over the canvas (crisp, outside the bloom); they never take the mouse.
+  const extraRenderers = useMemo(() => {
+    const css = new CSS2DRenderer();
+    css.domElement.style.pointerEvents = "none";
+    return [css];
+  }, []);
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   // Hover is tracked in a ref, not state: re-rendering on every hover made the graph
@@ -192,7 +199,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const [fontReady, setFontReady] = useState(false);
   useEffect(() => {
     const timeout = new Promise((r) => setTimeout(r, 2000));
-    Promise.race([Promise.all([document.fonts.load('500 48px "IBM Plex Sans"'), document.fonts.load('500 48px "IBM Plex Mono"')]), timeout])
+    Promise.race([Promise.all([document.fonts.load('650 48px "Manrope Variable"'), document.fonts.load('500 48px "Manrope Variable"')]), timeout])
       .catch(() => {})
       .finally(() => setFontReady(true));
   }, []);
@@ -245,7 +252,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       setStatus(pool, anim, n.status);
     }
     for (const { mesh, link } of flows.values()) {
-      setStreamColor(mesh, STATUS[cache.get(endId(link.source))?.status ?? "unknown"].color);
+      setStreamColor(mesh, cache.get(endId(link.source))?.hue ?? GOLD);
     }
   }, [models, providers, cache, objects, flows, pool]);
 
@@ -262,7 +269,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const anim = objects.get(n.id)?.userData.anim as NodeAnim | undefined;
       if (!anim) continue;
       if (!quality) {
-        setTint(anim, STATUS[n.status].color);
+        setTint(anim, n.hue);
         setBadge(pool, anim, null);
         continue;
       }
@@ -279,6 +286,35 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       ? { models: evaluation.models, threshold: underratedThreshold(evaluation.models) }
       : null;
   const nodeLabel = useCallback((n: GNode) => tooltip(n, qualityTipRef.current), []);
+
+  // Label placement, like a map: every 300 ms, the most important tags are kept (core, focus,
+  // then by downloads) and a tag that would overlap one already placed fades out.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const tags: { el: HTMLElement; priority: number }[] = [];
+      for (const [nodeId, group] of objects) {
+        const anim = group.userData.anim as NodeAnim | undefined;
+        const label = anim?.label as (THREE.Object3D & { element?: HTMLElement }) | undefined;
+        if (!anim || !label?.element || !label.visible || label.element.style.display === "none") continue;
+        const n = cache.get(nodeId);
+        const focus = anim.fadeTarget === 1 && !anim.labelAlways ? 1e12 : 0;
+        const priority = nodeId === ENGINE_ID ? 1e15 : focus + (n?.volume ?? 0) * (n?.kind === "provider" ? 2 : 1);
+        tags.push({ el: label.element, priority });
+      }
+      tags.sort((a, b) => b.priority - a.priority);
+      const placed: DOMRect[] = [];
+      for (const { el, priority } of tags) {
+        const inner = el.firstElementChild as HTMLElement | null;
+        const r = (inner ?? el).getBoundingClientRect();
+        const hit = placed.some(
+          (p) => r.left < p.right + 4 && r.right > p.left - 4 && r.top < p.bottom + 3 && r.bottom > p.top - 3,
+        );
+        el.classList.toggle("collides", hit && priority < 1e12);
+        if (!hit || priority >= 1e12) placed.push(r);
+      }
+    }, 300);
+    return () => window.clearInterval(id);
+  }, [objects, cache]);
 
   // A metrics/status update makes the node pulse once.
   useEffect(() => {
@@ -359,7 +395,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
 
     const composer = fg.postProcessingComposer();
     // Gentle bloom: only the brightest highlights glow; logos and the core stay legible.
-    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.7, 0.5, 0.72);
+    const bloom = new UnrealBloomPass(new THREE.Vector2(size.width, size.height), 0.55, 0.55, 0.7);
     composer.addPass(bloom);
     bloomRef.current = bloom;
     composerRef.current = composer;
@@ -576,8 +612,8 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const a = endId(link.source);
       const b = endId(link.target);
       const lit = active && (a === focusId || b === focusId);
-      const style = lit ? LINE.lit : LINE[link.kind === "lineage" ? "lineage" : "member"];
-      m.color.set(style.color);
+      const style = LINE[link.kind === "lineage" ? "lineage" : "member"];
+      m.color.set(lit ? LINE.lit.color : (cache.get(b)?.hue ?? THEME.muted));
       m.opacity = lit ? LINE.lit.opacity : active ? LINE.dim : style.opacity;
     }
   }, [flows, lines, objects, cache, neighbors]);
@@ -621,7 +657,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
       const style = LINE[l.kind === "lineage" ? "lineage" : "member"];
       const m = pool.own(
         new THREE.LineBasicMaterial({
-          color: style.color,
+          color: end(l.target)?.hue ?? THEME.muted,
           transparent: true,
           opacity: style.opacity,
           depthWrite: false,
@@ -681,14 +717,14 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
   const makeLink = useCallback(
     (l: GLink) => {
       if (l.kind !== "monitor") return null as unknown as THREE.Object3D;
-      const status = end(l.source)?.status ?? "unknown";
+      const hue = end(l.source)?.hue ?? GOLD;
       const provider = end(l.source)?.kind === "provider";
       // Importance shows in width and brightness: provider streams are the main
       // connections, model streams stay faint (5-15 %) until they're in focus.
       const width = provider ? 0.5 + 0.9 * l.activity : 0.15 + 0.25 * l.activity;
       const rate = provider ? 0.1 + 0.16 * l.activity : 0.05 + 0.11 * l.activity; // trains per second
-      const opacity = provider ? 0.22 + 0.22 * l.activity : 0.05 + 0.1 * l.activity;
-      const mesh = createStream(pool, STATUS[status].color, width, rate, Math.random(), opacity);
+      const opacity = provider ? 0.22 + 0.22 * l.activity : 0.03 + 0.07 * l.activity;
+      const mesh = createStream(pool, hue, width, rate, Math.random(), opacity);
       const old = flows.get(l.id);
       if (old) (old.mesh.userData.dispose as () => void)();
       flows.set(l.id, { mesh, link: l, head: 0 });
@@ -718,6 +754,7 @@ const Network3D = forwardRef<Network3DHandle, Props>(function Network3D(
           height={size.height}
           graphData={graph}
           backgroundColor={BACKGROUND}
+          extraRenderers={extraRenderers}
           showNavInfo={false}
           controlType="orbit"
           nodeThreeObject={makeObject}

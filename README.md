@@ -60,11 +60,12 @@ live-model-map/
 - **Focus**: hovering a node enlarges and brightens it, turns its direct relations' links
   turquoise and dims everything else; clicking keeps that focus and opens its panel (model or
   provider). Esc, a click in empty space or "Reset view" returns to the global view.
-- **Look**: an "observatory log". Green-black ink `#0B1112`, bone text `#E7E2D4`, aged brass
-  `#C8A15A` for anything you can interact with, verdigris `#5FA191` for healthy models, steel for
-  structure; warm tones only for degraded, down and security incidents. Newsreader names things
-  (title, model names, the finding), IBM Plex Sans carries the interface, IBM Plex Mono every
-  measurement; hover cards read like catalogue entries.
+- **Look**: "darkroom". Warm near-black background, a golden core, and one soft hue per model
+  family (a provider and its models share it), so clusters read like constellations. Statuses
+  don't colour the map: only models that need attention (degraded, down, security incident) get
+  a ring. Name tags are crisp HTML over the 3D view: providers show their name and model count,
+  the 12 most downloaded models a pill, and overlapping tags give way to the more important one.
+  One typeface, Manrope.
 - **Motion**: nodes breathe and wobble slightly when a train leaves and lean toward the core while
   it travels. Rotate / zoom / pan; clicks tolerate a few pixels of mouse movement and nodes can't
   be dragged by accident.
